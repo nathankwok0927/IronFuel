@@ -57,8 +57,7 @@
             onSnapshot, query, orderBy, limit, Timestamp 
         } from 'firebase/firestore';
 
-        // --- 您的 Firebase Config (已填入) ---
-        // 這些資訊公開是安全的，真正的保護來自 Firebase Console 的 Security Rules
+        // --- 您的 Firebase Config (已幫您填入正確資訊) ---
         const manualConfig = {
             apiKey: "AIzaSyA9kVApSCs6eD-u5U90f3dnjbI9TILpaLQ",
             authDomain: "ironfuel-cd5bf.firebaseapp.com",
@@ -70,33 +69,25 @@
         };
 
         // --- App ID 設定 ---
-        // 預設使用環境變數中的 ID (若有)，否則使用手動設定的 ID
         const envAppId = typeof __app_id !== 'undefined' ? __app_id : null;
         const appId = envAppId || 'ironfuel-app'; 
 
-        // --- Configuration ---
-        const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+        // --- Configuration (關鍵修正！) ---
+        // 將模型改為 gemini-1.5-flash，這是目前公開且支援繁體中文最好的模型
+        const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
         const DEFAULT_API_KEY = ""; 
 
-        // --- 初始化 Firebase (自動偵測環境) ---
+        // --- 初始化 Firebase ---
         let app, auth, db;
         try {
             let finalConfig = null;
-
-            // 1. 優先嘗試使用環境變數 (預覽環境)
             if (typeof __firebase_config !== 'undefined') {
                 try {
                     finalConfig = JSON.parse(__firebase_config);
-                    console.log("Using Environment Firebase Config");
-                } catch (e) {
-                    console.error("Error parsing env config", e);
-                }
+                } catch (e) { console.error(e); }
             }
-
-            // 2. 如果沒有環境變數，則使用手動設定 (GitHub Pages / Localhost)
             if (!finalConfig && Object.keys(manualConfig).length > 0) {
                 finalConfig = manualConfig;
-                console.log("Using Manual Firebase Config");
             }
 
             if (finalConfig) {
@@ -104,7 +95,7 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
             } else {
-                console.error("尚未設定 Firebase Config。請在 index.html 中填入您的設定。");
+                console.error("尚未設定 Firebase Config");
             }
         } catch (e) {
             console.error("Firebase 初始化失敗:", e);
@@ -197,10 +188,7 @@
                         訪客試用 (不保存帳號)
                     </button>
                     </div>
-                    
-                    <p className="mt-8 text-xs text-slate-500">
-                    登入後，您的數據與設定將安全同步至雲端資料庫。
-                    </p>
+                    <p className="mt-8 text-xs text-slate-500">登入後，您的數據與設定將安全同步至雲端資料庫。</p>
                 </div>
                 </div>
             );
@@ -266,13 +254,18 @@
                     }
                 );
 
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error?.message || "API Error");
+                }
+
                 const data = await response.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
                 setMessages(prev => [...prev, { role: 'model', text: text }]);
                 } catch (error) {
                 console.error("Chat Error", error);
-                setMessages(prev => [...prev, { role: 'model', text: "抱歉，連線發生錯誤。請檢查您的 API Key 設定是否正確。" }]);
+                setMessages(prev => [...prev, { role: 'model', text: `抱歉，連線發生錯誤 (${error.message})。請檢查您的 API Key 設定或網路連線。` }]);
                 } finally {
                 setIsLoading(false);
                 }
@@ -377,7 +370,6 @@
                 protein = Math.round(formData.weight * 1.8);
                 fats = Math.round(formData.weight * 1.0);
                 }
-                // Recalculate remaining carbs
                 const remainingCals = targetCalories - (protein * 4) - (fats * 9);
                 carbs = Math.max(0, Math.round(remainingCals / 4));
                 
@@ -640,6 +632,11 @@
                     }
                     );
 
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        throw new Error(errData.error?.message || "AI Analysis Error");
+                    }
+
                     const data = await response.json();
                     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     let jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -655,7 +652,7 @@
                 };
                 } catch (error) {
                 console.error("AI Error:", error);
-                alert("AI 分析失敗，請檢查 API Key 是否正確。");
+                alert(`AI 分析失敗: ${error.message}，請檢查 Key 是否有權限或模型名稱是否正確。`);
                 setIsAnalyzing(false);
                 }
             };
@@ -701,13 +698,18 @@
                     }
                 );
 
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error?.message || "AI Suggestion Error");
+                }
+
                 const data = await response.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 setSuggestion(JSON.parse(jsonStr));
                 } catch (error) {
                 console.error("Suggestion Error", error);
-                alert("AI 思考超時，請檢查 API Key 或重試！");
+                alert(`AI 思考超時: ${error.message}，請檢查 Key 是否有權限或模型名稱是否正確。`);
                 } finally {
                 setIsSuggesting(false);
                 }
@@ -865,10 +867,19 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error?.message || "AI Analysis Error");
+                }
+
                 const data = await response.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 setAnalysis(text);
-                } catch (error) { console.error("Analysis Error", error); alert("分析失敗，請檢查 API Key 或重試。"); } finally { setIsAnalyzing(false); }
+                } catch (error) { 
+                    console.error("Analysis Error", error); 
+                    alert(`AI 思考超時: ${error.message}，請檢查 Key 是否有權限或模型名稱是否正確。`); 
+                } finally { setIsAnalyzing(false); }
             };
 
             return (
