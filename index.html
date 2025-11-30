@@ -34,7 +34,7 @@
         color: white;
       }
 
-      /* === 獨立背景圖層 (解決 iPhone 相容性與比例問題) === */
+      /* === 獨立背景圖層 === */
       #bg-layer {
         position: fixed;
         top: 0;
@@ -44,37 +44,31 @@
         z-index: -1;
         
         background-image: url('./bg.jpg');
-        background-size: cover;      
         background-repeat: no-repeat;
         
-        /* 電腦版預設：置中 */
+        /* 預設模式：Cover (填滿整個螢幕，可能會裁切) */
+        background-size: cover;      
         background-position: center center; 
+        transition: all 0.5s ease; /* 加入轉場動畫 */
+      }
+
+      /* === 📱 手機適配模式 (透過 JS 切換 class) === */
+      #bg-layer.mobile-fit {
+        /* 改為 Contain (完整顯示圖片，不裁切) */
+        background-size: contain !important;
+        /* 圖片置頂 */
+        background-position: top center !important;
+        /* 下方留白處補上深藍色背景 */
+        background-color: #0f172a; 
       }
 
       /* === 內容遮罩層 === */
       #root {
-        /* 電腦版遮罩：維持深色以利閱讀 */
-        background-color: rgba(15, 23, 42, 0.85); 
+        /* 稍微調淡一點遮罩，讓背景更清楚 */
+        background-color: rgba(15, 23, 42, 0.80); 
         min-height: 100vh;
         width: 100%;
         position: relative;
-      }
-
-      /* === 📱 手機版專屬優化 (當螢幕寬度小於 768px) === */
-      @media (max-width: 768px) {
-        #bg-layer {
-           /* 關鍵修改：
-             因為圖片是橫的，手機直立時會被放大裁切。
-             這裡設定 '20% center' 代表「水平位置靠左 20%」，
-             這樣可以強迫顯示出左邊的人物 (三笠)，而不是只顯示中間的牆壁。
-           */
-           background-position: 20% center; 
-        }
-
-        #root {
-           /* 手機版遮罩：稍微調淡一點，讓背景更清楚，增加動力！ */
-           background-color: rgba(15, 23, 42, 0.70); 
-        }
       }
 
       .loading { display: flex; justify-content: center; align-items: center; height: 100vh; color: #10b981; font-weight: bold; }
@@ -96,7 +90,7 @@
             Calendar as CalendarIcon, Loader2, TrendingDown, Target, Activity, ImagePlus, 
             FileText, Sparkles, ChefHat, MessageSquare, X, PenTool, Scale, MessageCircle, 
             Send, Bot, Key, LogOut, User, LogIn, Settings, Eye, EyeOff, CheckCircle2, 
-            AlertTriangle, Copy, Database, Globe, Lock, ChevronDown, ChevronUp
+            AlertTriangle, Copy, Database, Globe, Lock, ChevronDown, ChevronUp, Smartphone
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -197,8 +191,6 @@
         const LoginScreen = ({ onGuestLogin, onGoogleLogin, isLoggingIn }) => {
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
-                {/* 這裡移除 bg-slate-900，讓 body 的背景圖片透出來 */}
-                
                 <div className="z-10 w-full max-w-md bg-slate-800/90 backdrop-blur-xl p-8 rounded-3xl border border-slate-700 shadow-2xl text-center">
                     <div className="mb-8 flex flex-col items-center">
                     <div className="bg-gradient-to-tr from-emerald-500 to-teal-500 p-4 rounded-2xl shadow-lg mb-4">
@@ -704,7 +696,7 @@
                 };
                 } catch (error) {
                 console.error("AI Error:", error);
-                alert(`AI 分析失敗: ${error.message}，請檢查 Key 是否有權限或模型名稱是否正確。`);
+                alert("AI 分析失敗，請檢查 API Key 是否正確。");
                 setIsAnalyzing(false);
                 }
             };
@@ -750,18 +742,13 @@
                     }
                 );
 
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.error?.message || "AI Suggestion Error");
-                }
-
                 const data = await response.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 setSuggestion(JSON.parse(jsonStr));
                 } catch (error) {
                 console.error("Suggestion Error", error);
-                alert(`AI 思考超時: ${error.message}，請檢查 Key 是否有權限或模型名稱是否正確。`);
+                alert("AI 思考超時，請檢查 API Key 或重試！");
                 } finally {
                 setIsSuggesting(false);
                 }
@@ -983,6 +970,15 @@
             const [view, setView] = useState('diary');
             const [isChatOpen, setIsChatOpen] = useState(false);
             const [isLoggingIn, setIsLoggingIn] = useState(true);
+            const [isMobileFit, setIsMobileFit] = useState(false);
+
+            useEffect(() => {
+                if (isMobileFit) {
+                    document.getElementById('bg-layer').classList.add('mobile-fit');
+                } else {
+                    document.getElementById('bg-layer').classList.remove('mobile-fit');
+                }
+            }, [isMobileFit]);
 
             useEffect(() => {
                 if (!auth) {
@@ -1087,6 +1083,13 @@
                     <div className="flex items-center gap-2"><div className="bg-emerald-500 p-2 rounded-lg"><Activity className="w-5 h-5 text-slate-900" /></div><h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">IronFuel</h1></div>
                     <div className="flex items-center gap-3">
                     {profile && <div className="text-xs text-right"><p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p><p className="text-slate-500">{profile.goal === 'cut' ? '減脂' : '增肌'}</p></div>}
+                    <button 
+                        onClick={() => setIsMobileFit(!isMobileFit)}
+                        className={`p-2 rounded-lg transition-colors ${isMobileFit ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'}`}
+                        title="切換背景模式 (滿版/完整)"
+                    >
+                        <Smartphone className="w-4 h-4" />
+                    </button>
                     <button onClick={handleLogout} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors" title="登出"><LogOut className="w-4 h-4" /></button>
                     </div>
                 </header>
