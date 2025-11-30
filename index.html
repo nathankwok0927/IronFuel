@@ -57,18 +57,16 @@
             onSnapshot, query, orderBy, limit, Timestamp 
         } from 'firebase/firestore';
 
-        // ============================================================================
-        // ⚠️⚠️⚠️ 關鍵設定區域 ⚠️⚠️⚠️
-        // 如果您是在 GitHub Pages 等外部環境運行，請務必填寫下方的 manualConfig
-        // 如果您是在目前的預覽視窗運行，系統會自動使用內建設定 (__firebase_config)
-        // ============================================================================
+        // --- 您的 Firebase Config (已填入) ---
+        // 這些資訊公開是安全的，真正的保護來自 Firebase Console 的 Security Rules
         const manualConfig = {
-            // apiKey: "AIzaSy...",
-            // authDomain: "your-app.firebaseapp.com",
-            // projectId: "your-app",
-            // storageBucket: "your-app.appspot.com",
-            // messagingSenderId: "...",
-            // appId: "..."
+            apiKey: "AIzaSyA9kVApSCs6eD-u5U90f3dnjbI9TILpaLQ",
+            authDomain: "ironfuel-cd5bf.firebaseapp.com",
+            projectId: "ironfuel-cd5bf",
+            storageBucket: "ironfuel-cd5bf.firebasestorage.app",
+            messagingSenderId: "690568494476",
+            appId: "1:690568494476:web:5ecda02b96a59d5bc66aa9",
+            measurementId: "G-9YS0R1FD5J"
         };
 
         // --- App ID 設定 ---
@@ -201,7 +199,7 @@
                     </div>
                     
                     <p className="mt-8 text-xs text-slate-500">
-                    注意：此為靜態頁面版，請確保 firebaseConfig 已正確設定。
+                    登入後，您的數據與設定將安全同步至雲端資料庫。
                     </p>
                 </div>
                 </div>
