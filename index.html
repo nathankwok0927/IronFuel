@@ -26,27 +26,41 @@
     </script>
 
     <style>
-      /* --- 關鍵修改：背景圖片設定 --- */
+      /* === 關鍵修復：分離背景層 ===
+         為了解決 iPhone 上 background-attachment: fixed 失效的問題，
+         我們不將圖片設在 body，而是設在一個獨立的固定 div 上。
+      */
       body { 
         margin: 0;
         padding: 0;
         background-color: #0f172a; 
         color: white;
-        
-        /* 設定背景圖片 (請確認檔名為 bg.jpg) */
-        background-image: url('./bg.jpg');
-        background-size: cover;      /* 讓圖片填滿整個螢幕 */
-        background-position: center; /* 圖片置中 */
-        background-attachment: fixed;/* 捲動時背景固定不動 */
-        background-repeat: no-repeat;
       }
 
-      /* --- 關鍵修改：半透明遮罩 --- */
+      /* 這是獨立的背景圖層 */
+      #bg-layer {
+        position: fixed; /* 強制固定 */
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -1; /* 放在最底層 */
+        
+        /* 背景圖片設定 */
+        background-image: url('./bg.jpg');
+        background-size: cover;      
+        background-position: center center;
+        background-repeat: no-repeat;
+        
+        /* 這裡不需要 attachment: fixed，因為 div 本身就是 position: fixed */
+      }
+
+      /* 內容層：半透明遮罩 */
       #root {
-        /* 加上 85% 不透明度的深藍色背景，讓文字能清楚浮現在圖片上 */
-        background-color: rgba(15, 23, 42, 0.85); 
+        background-color: rgba(15, 23, 42, 0.85); /* 保持原本的深藍色濾鏡 */
         min-height: 100vh;
         width: 100%;
+        position: relative; /* 確保內容在背景之上 */
       }
 
       /* 隱藏未載入時的內容 */
@@ -54,6 +68,9 @@
     </style>
 </head>
 <body>
+    <!-- 這裡就是新的背景圖層 -->
+    <div id="bg-layer"></div>
+
     <div id="root">
         <div class="loading">正在啟動 IronFuel...</div>
     </div>
@@ -79,7 +96,7 @@
             onSnapshot, query, orderBy, limit, Timestamp 
         } from 'firebase/firestore';
 
-        // --- 您的 Firebase Config ---
+        // --- 您的 Firebase Config (請保持這段設定) ---
         const manualConfig = {
             apiKey: "AIzaSyA9kVApSCs6eD-u5U90f3dnjbI9TILpaLQ",
             authDomain: "ironfuel-cd5bf.firebaseapp.com",
@@ -391,6 +408,7 @@
                 protein = Math.round(formData.weight * 1.8);
                 fats = Math.round(formData.weight * 1.0);
                 }
+                // Recalculate remaining carbs
                 const remainingCals = targetCalories - (protein * 4) - (fats * 9);
                 carbs = Math.max(0, Math.round(remainingCals / 4));
                 
