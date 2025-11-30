@@ -26,10 +26,7 @@
     </script>
 
     <style>
-      /* === 關鍵修復：分離背景層 ===
-         為了解決 iPhone 上 background-attachment: fixed 失效的問題，
-         我們不將圖片設在 body，而是設在一個獨立的固定 div 上。
-      */
+      /* === 基礎設定 === */
       body { 
         margin: 0;
         padding: 0;
@@ -37,38 +34,54 @@
         color: white;
       }
 
-      /* 這是獨立的背景圖層 */
+      /* === 獨立背景圖層 (解決 iPhone 相容性與比例問題) === */
       #bg-layer {
-        position: fixed; /* 強制固定 */
+        position: fixed;
         top: 0;
         left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: -1; /* 放在最底層 */
+        width: 100%;
+        height: 100%;
+        z-index: -1;
         
-        /* 背景圖片設定 */
         background-image: url('./bg.jpg');
         background-size: cover;      
-        background-position: center center;
         background-repeat: no-repeat;
         
-        /* 這裡不需要 attachment: fixed，因為 div 本身就是 position: fixed */
+        /* 電腦版預設：置中 */
+        background-position: center center; 
       }
 
-      /* 內容層：半透明遮罩 */
+      /* === 內容遮罩層 === */
       #root {
-        background-color: rgba(15, 23, 42, 0.85); /* 保持原本的深藍色濾鏡 */
+        /* 電腦版遮罩：維持深色以利閱讀 */
+        background-color: rgba(15, 23, 42, 0.85); 
         min-height: 100vh;
         width: 100%;
-        position: relative; /* 確保內容在背景之上 */
+        position: relative;
       }
 
-      /* 隱藏未載入時的內容 */
+      /* === 📱 手機版專屬優化 (當螢幕寬度小於 768px) === */
+      @media (max-width: 768px) {
+        #bg-layer {
+           /* 關鍵修改：
+             因為圖片是橫的，手機直立時會被放大裁切。
+             這裡設定 '20% center' 代表「水平位置靠左 20%」，
+             這樣可以強迫顯示出左邊的人物 (三笠)，而不是只顯示中間的牆壁。
+           */
+           background-position: 20% center; 
+        }
+
+        #root {
+           /* 手機版遮罩：稍微調淡一點，讓背景更清楚，增加動力！ */
+           background-color: rgba(15, 23, 42, 0.70); 
+        }
+      }
+
       .loading { display: flex; justify-content: center; align-items: center; height: 100vh; color: #10b981; font-weight: bold; }
     </style>
 </head>
 <body>
-    <!-- 這裡就是新的背景圖層 -->
+    <!-- 背景圖層 -->
     <div id="bg-layer"></div>
 
     <div id="root">
@@ -96,7 +109,7 @@
             onSnapshot, query, orderBy, limit, Timestamp 
         } from 'firebase/firestore';
 
-        // --- 您的 Firebase Config (請保持這段設定) ---
+        // --- 您的 Firebase Config ---
         const manualConfig = {
             apiKey: "AIzaSyA9kVApSCs6eD-u5U90f3dnjbI9TILpaLQ",
             authDomain: "ironfuel-cd5bf.firebaseapp.com",
