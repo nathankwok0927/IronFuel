@@ -1,1 +1,1248 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Calculator, 
+  Camera, 
+  Utensils, 
+  BarChart3, 
+  ChevronRight, 
+  Plus, 
+  Trash2, 
+  Save, 
+  Calendar as CalendarIcon, 
+  Loader2, 
+  TrendingDown, 
+  Target, 
+  Activity,
+  ImagePlus,
+  FileText,
+  Sparkles,
+  ChefHat,
+  MessageSquare,
+  X,
+  PenTool,
+  Scale,
+  MessageCircle,
+  Send,
+  Bot,
+  Key,
+  LogOut,
+  User,
+  LogIn,
+  Settings,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertTriangle,
+  Copy,
+  Database,
+  Globe,
+  Lock,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged,
+  signInWithCustomToken,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  addDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  limit,
+  Timestamp 
+} from 'firebase/firestore';
 
+// --- Firebase Initialization ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- Configuration ---
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+const DEFAULT_API_KEY = ""; 
+
+// --- Helper Components ---
+const SimpleLineChart = ({ data, color = "#10b981", labelKey = "weight" }) => {
+  if (!data || data.length < 2) return (
+    <div className="h-40 flex items-center justify-center text-slate-500 text-xs border border-slate-700 border-dashed rounded-lg">
+      至少需要兩筆記錄才能顯示趨勢圖
+    </div>
+  );
+
+  const values = data.map(d => d[labelKey]);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const padding = (max - min) * 0.2 || 1; 
+  const graphMin = min - padding;
+  const graphMax = max + padding;
+  const range = graphMax - graphMin;
+
+  const points = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * 100;
+    const y = 100 - ((d[labelKey] - graphMin) / range) * 100;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="w-full h-40 relative mt-4">
+      <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <line x1="0" y1="25" x2="100" y2="25" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
+        <line x1="0" y1="50" x2="100" y2="50" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
+        <line x1="0" y1="75" x2="100" y2="75" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
+        <polyline fill="none" stroke={color} strokeWidth="2" points={points} vectorEffect="non-scaling-stroke" />
+        {data.map((d, i) => {
+          const x = (i / (data.length - 1)) * 100;
+          const y = 100 - ((d[labelKey] - graphMin) / range) * 100;
+          return <circle key={i} cx={x} cy={y} r="1.5" fill="#1e293b" stroke={color} strokeWidth="0.5" vectorEffect="non-scaling-stroke" />;
+        })}
+      </svg>
+      <div className="absolute top-0 left-0 text-[10px] text-slate-500 -mt-5">{max}kg</div>
+      <div className="absolute bottom-0 left-0 text-[10px] text-slate-500 -mb-5">{min}kg</div>
+    </div>
+  );
+};
+
+// --- Authentication Components ---
+const LoginScreen = ({ onGuestLogin, onGoogleLogin, isLoggingIn }) => {
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="z-10 w-full max-w-md bg-slate-800/80 backdrop-blur-xl p-8 rounded-3xl border border-slate-700 shadow-2xl text-center">
+        <div className="mb-8 flex flex-col items-center">
+          <div className="bg-gradient-to-tr from-emerald-500 to-teal-500 p-4 rounded-2xl shadow-lg mb-4">
+            <Activity className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+            IronFuel
+          </h1>
+          <p className="text-slate-400 mt-2 text-sm">您的專屬 AI 智能健身營養教練</p>
+        </div>
+
+        <div className="space-y-4">
+          <button 
+            onClick={onGoogleLogin}
+            disabled={isLoggingIn}
+            className="w-full bg-white hover:bg-slate-100 text-slate-900 py-3.5 rounded-xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:scale-100"
+          >
+            {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+              </svg>
+            )}
+            Google 帳號登入
+          </button>
+
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-slate-600"></div>
+            <span className="flex-shrink-0 mx-4 text-slate-500 text-xs">或</span>
+            <div className="flex-grow border-t border-slate-600"></div>
+          </div>
+
+          <button 
+            onClick={onGuestLogin}
+            disabled={isLoggingIn}
+            className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+          >
+            <User className="w-5 h-5" />
+            訪客試用 (不保存帳號)
+          </button>
+        </div>
+        
+        <p className="mt-8 text-xs text-slate-500">
+          登入後，您的數據與設定將安全同步至雲端資料庫。
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// --- Settings & Profile Component ---
+const SettingsScreen = ({ user, profile, setProfile, onSave, hasApiKey }) => {
+  const [formData, setFormData] = useState(profile || {
+    height: 171,
+    weight: 80,
+    age: 30,
+    gender: 'male',
+    activityLevel: '1.55', 
+    goal: 'cut',
+    bodyFat: 21
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  const calculateTDEE = () => {
+    let bmr = (10 * formData.weight) + (6.25 * formData.height) - (5 * formData.age);
+    bmr += formData.gender === 'male' ? 5 : -161;
+    const tdee = Math.round(bmr * parseFloat(formData.activityLevel));
+    let targetCalories = tdee;
+    let protein = 0, carbs = 0, fats = 0;
+
+    if (formData.goal === 'cut') {
+      targetCalories = tdee - 500;
+      protein = Math.round(formData.weight * 2.2);
+      fats = Math.round(formData.weight * 0.9);
+      const remainingCals = targetCalories - (protein * 4) - (fats * 9);
+      carbs = Math.round(remainingCals / 4);
+    } else if (formData.goal === 'bulk') {
+      targetCalories = tdee + 300;
+      protein = Math.round(formData.weight * 2.0);
+      fats = Math.round(formData.weight * 1.0);
+      const remainingCals = targetCalories - (protein * 4) - (fats * 9);
+      carbs = Math.round(remainingCals / 4);
+    } else {
+      protein = Math.round(formData.weight * 1.8);
+      fats = Math.round(formData.weight * 1.0);
+      const remainingCals = targetCalories - (protein * 4) - (fats * 9);
+      carbs = Math.round(remainingCals / 4);
+    }
+    return { tdee, targetCalories, protein, carbs, fats };
+  };
+
+  const results = calculateTDEE();
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage("");
+    await onSave({ ...formData, ...results });
+    setIsSaving(false);
+    setSaveMessage("✅ 身體數據已更新！");
+    setTimeout(() => setSaveMessage(""), 3000);
+  };
+
+  const handleCopy = (text, label) => {
+    navigator.clipboard.writeText(text);
+    alert(`${label} 已複製！`);
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+      
+      {/* Global AI Key Status */}
+      <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+         <div className="flex justify-between items-center mb-4">
+           <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Globe className="w-5 h-5 text-indigo-400" /> AI 服務狀態 (Global)
+          </h2>
+          <button 
+            onClick={() => setShowAdmin(!showAdmin)}
+            className="text-slate-600 hover:text-slate-400 p-1"
+            title="管理員設定"
+          >
+            {showAdmin ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+         </div>
+        
+        {/* Status Indicator (Always Visible) */}
+        <div className={`p-4 rounded-xl border flex items-center gap-3 ${hasApiKey ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-red-900/20 border-red-500/50'}`}>
+          {hasApiKey ? (
+            <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+          ) : (
+            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0" />
+          )}
+          <div>
+            <h4 className={`font-bold ${hasApiKey ? 'text-emerald-400' : 'text-red-400'}`}>
+              {hasApiKey ? "AI 功能已就緒" : "等待設定"}
+            </h4>
+            <p className="text-xs text-slate-400 mt-1">
+              {hasApiKey ? "所有使用者皆可正常使用智能功能。" : "目前無法使用 AI。"}
+            </p>
+          </div>
+        </div>
+
+        {/* --- HIDDEN ADMIN SECTION --- */}
+        {showAdmin && (
+          <div className="mt-6 pt-6 border-t border-slate-700 animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 mb-3 text-yellow-500">
+              <Lock className="w-4 h-4" />
+              <span className="font-bold text-sm">管理員專用資訊</span>
+            </div>
+            
+            <div className="text-xs text-slate-500 bg-slate-900 p-3 rounded-lg border border-slate-800 mb-4">
+              <p className="mb-2 font-bold text-slate-400">Firebase 設定路徑指南：</p>
+              <div className="space-y-2 font-mono text-[10px] text-slate-400">
+                <p>1. 進入 Firebase Console &gt; Firestore</p>
+                <p>2. 建立路徑: <code>artifacts</code> / <code>{appId}</code> / <code>public</code> / <code>data</code> / <code>config</code> / <code>settings</code></p>
+                <p>3. 新增欄位: <code>gemini_api_key</code> (String)</p>
+                <p>4. 填入您的 Google API Key</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider flex items-center gap-1">
+                <Database className="w-3 h-3" /> App ID (請複製此 ID)
+              </label>
+              <div className="flex gap-2 mt-1">
+                <code className="flex-1 bg-slate-950 text-slate-300 p-2 rounded text-xs font-mono truncate border border-slate-700">
+                  {appId}
+                </code>
+                <button 
+                  onClick={() => handleCopy(appId, "App ID")}
+                  className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded transition-colors"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+        <h2 className="text-xl font-bold text-emerald-400 mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5" /> 您的身體數據 (個人)
+        </h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wider">身高 (cm)</label>
+            <input type="number" value={formData.height} onChange={(e) => setFormData({...formData, height: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wider">體重 (kg)</label>
+            <input type="number" value={formData.weight} onChange={(e) => setFormData({...formData, weight: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wider">年齡</label>
+            <input type="number" value={formData.age} onChange={(e) => setFormData({...formData, age: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wider">體脂率 (%)</label>
+            <input type="number" value={formData.bodyFat} onChange={(e) => setFormData({...formData, bodyFat: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="text-slate-400 text-xs uppercase tracking-wider">活動量</label>
+          <select value={formData.activityLevel} onChange={(e) => setFormData({...formData, activityLevel: e.target.value})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1 focus:ring-2 focus:ring-emerald-500 outline-none">
+            <option value="1.2">久坐不動</option>
+            <option value="1.375">輕度活動 (1-3天)</option>
+            <option value="1.55">中度活動 (3-5天)</option>
+            <option value="1.725">高度活動 (6-7天)</option>
+          </select>
+        </div>
+        <div className="mt-4">
+          <label className="text-slate-400 text-xs uppercase tracking-wider">目標</label>
+          <div className="flex gap-2 mt-1">
+            {['cut', 'maintain', 'bulk'].map(mode => (
+              <button key={mode} onClick={() => setFormData({...formData, goal: mode})} className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-colors ${formData.goal === mode ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
+                {mode === 'cut' ? '減脂' : mode === 'maintain' ? '維持' : '增肌'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+          <Target className="w-24 h-24 text-emerald-400" />
+        </div>
+        <h3 className="text-lg font-semibold text-white mb-4">預覽：每日營養目標</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900/50 p-3 rounded-xl">
+            <p className="text-slate-400 text-xs">目標熱量</p>
+            <p className="text-2xl font-bold text-emerald-400">{results.targetCalories}</p>
+            <p className="text-xs text-slate-500">kcal</p>
+          </div>
+          <div className="bg-slate-900/50 p-3 rounded-xl">
+            <p className="text-slate-400 text-xs">蛋白質</p>
+            <p className="text-xl font-bold text-blue-400">{results.protein}g</p>
+            <p className="text-xs text-slate-500">高蛋白保肌</p>
+          </div>
+          <div className="bg-slate-900/50 p-3 rounded-xl">
+            <p className="text-slate-400 text-xs">碳水化合物</p>
+            <p className="text-xl font-bold text-yellow-400">{results.carbs}g</p>
+            <p className="text-xs text-slate-500">訓練燃料</p>
+          </div>
+          <div className="bg-slate-900/50 p-3 rounded-xl">
+            <p className="text-slate-400 text-xs">脂肪</p>
+            <p className="text-xl font-bold text-red-400">{results.fats}g</p>
+            <p className="text-xs text-slate-500">荷爾蒙維持</p>
+          </div>
+        </div>
+        <button 
+          onClick={handleSave} 
+          disabled={isSaving}
+          className="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-900/20"
+        >
+          {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          {isSaving ? "正在儲存..." : "儲存設定並開始"}
+        </button>
+        {saveMessage && (
+          <div className="mt-3 p-3 bg-emerald-500/20 border border-emerald-500/50 rounded-lg flex items-center gap-2 text-emerald-400 text-sm justify-center animate-in fade-in slide-in-from-bottom-2">
+            <CheckCircle2 className="w-4 h-4" /> {saveMessage}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 2. Food Diary with Gemini AI & Manual Entry
+const FoodDiary = ({ user, profile, apiKey }) => {
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [logs, setLogs] = useState([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestion, setSuggestion] = useState(null);
+  const [isManualOpen, setIsManualOpen] = useState(false);
+  const [manualData, setManualData] = useState({
+    name: '', mealType: 'lunch', calories: '', protein: '', carbs: '', fat: ''
+  });
+
+  const fileInputRef = useRef(null);
+  
+  const [dayStats, setDayStats] = useState({ cals: 0, pro: 0, carbs: 0, fat: 0 });
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'artifacts', appId, 'users', user.uid, 'logs')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allLogs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const todaysLogs = allLogs.filter(log => log.date === date);
+      setLogs(todaysLogs);
+
+      const stats = todaysLogs.reduce((acc, curr) => ({
+        cals: acc.cals + (curr.calories || 0),
+        pro: acc.pro + (curr.protein || 0),
+        carbs: acc.carbs + (curr.carbs || 0),
+        fat: acc.fat + (curr.fat || 0),
+      }), { cals: 0, pro: 0, carbs: 0, fat: 0 });
+      setDayStats(stats);
+    });
+
+    return () => unsubscribe();
+  }, [user, date]);
+
+  // --- Manual Entry Logic ---
+  const handleManualSubmit = async () => {
+    if (!manualData.name || !manualData.calories) return;
+    
+    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'logs'), {
+      name: manualData.name,
+      mealType: manualData.mealType, // breakfast, lunch, dinner, snack
+      calories: Number(manualData.calories),
+      protein: Number(manualData.protein) || 0,
+      carbs: Number(manualData.carbs) || 0,
+      fat: Number(manualData.fat) || 0,
+      date: date,
+      timestamp: new Date().toISOString()
+    });
+    
+    setIsManualOpen(false);
+    setManualData({ name: '', mealType: 'lunch', calories: '', protein: '', carbs: '', fat: '' });
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!apiKey) {
+      alert("AI 功能尚未啟用，請通知管理員檢查後台設定。");
+      return;
+    }
+
+    setIsAnalyzing(true);
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = async () => {
+        const base64Data = reader.result.split(',')[1];
+        const mimeType = file.type;
+
+        // Call Gemini API for Image Analysis
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: "Analyze this food image. Identify the food item and estimate its nutritional values (Calories, Protein, Carbs, Fat) for the visible portion. Return ONLY a valid JSON object with this structure: { \"name\": \"Food Name\", \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number, \"note\": \"Brief explanation\" }. Do not use markdown." },
+                  { inlineData: { mimeType: mimeType, data: base64Data } }
+                ]
+              }]
+            })
+          }
+        );
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        let jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const foodData = JSON.parse(jsonStr);
+
+        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'logs'), {
+          ...foodData,
+          mealType: 'auto', // Default for camera
+          date: date,
+          timestamp: new Date().toISOString()
+        });
+        setIsAnalyzing(false);
+      };
+    } catch (error) {
+      console.error("AI Error:", error);
+      alert("AI 分析失敗，請檢查 API Key 是否正確。");
+      setIsAnalyzing(false);
+    }
+  };
+
+  const deleteLog = async (id) => {
+    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'logs', id));
+  };
+
+  const getMealSuggestion = async () => {
+    if (!apiKey) {
+      alert("AI 功能尚未啟用，請通知管理員檢查後台設定。");
+      return;
+    }
+
+    setIsSuggesting(true);
+    setSuggestion(null);
+
+    const remaining = {
+      cals: profile.targetCalories - dayStats.cals,
+      pro: profile.protein - dayStats.pro,
+      carbs: profile.carbs - dayStats.carbs,
+      fat: profile.fats - dayStats.fat
+    };
+
+    try {
+      const prompt = `
+        我是一名健身教練。我的學生今天還剩下以下營養額度：
+        熱量: ${remaining.cals} kcal, 蛋白質: ${remaining.pro}g, 碳水: ${remaining.carbs}g, 脂肪: ${remaining.fat}g。
+        他的目標是：${profile.goal === 'cut' ? '減脂' : '增肌'}。
+        請為他建議「單一餐點」（午餐或晚餐），必須符合且填滿剩下的蛋白質目標，但不要超過熱量上限。
+        請提供繁體中文的建議。
+        Return ONLY a valid JSON object: { "mealName": "名稱", "reason": "推薦理由", "ingredients": "食材清單", "estimatedNutrition": "預估熱量與三大營養素" }
+      `;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        }
+      );
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      setSuggestion(JSON.parse(jsonStr));
+    } catch (error) {
+      console.error("Suggestion Error", error);
+      alert("AI 思考超時，請檢查 API Key 或重試！");
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
+
+  const Progress = ({ current, target, color }) => {
+    const pct = Math.min((current / target) * 100, 100);
+    return (
+      <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
+        <div 
+          className={`h-2 rounded-full ${color} transition-all duration-500`} 
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Date Picker */}
+      <div className="flex items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <button className="p-2 hover:bg-slate-700 rounded-lg" onClick={() => {
+           const d = new Date(date); d.setDate(d.getDate() - 1); setDate(d.toISOString().split('T')[0]);
+        }}><ChevronRight className="w-5 h-5 rotate-180 text-slate-400"/></button>
+        <div className="flex items-center gap-2 text-white font-medium">
+          <CalendarIcon className="w-5 h-5 text-emerald-500" />
+          {date}
+        </div>
+        <button className="p-2 hover:bg-slate-700 rounded-lg" onClick={() => {
+           const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d.toISOString().split('T')[0]);
+        }}><ChevronRight className="w-5 h-5 text-slate-400"/></button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+        <div className="flex justify-between items-end mb-4">
+          <div>
+            <h3 className="text-slate-400 text-sm">今日熱量</h3>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-white">{dayStats.cals}</span>
+              <span className="text-sm text-slate-500">/ {profile?.targetCalories} kcal</span>
+            </div>
+          </div>
+          <div className="text-right">
+             <span className={`text-sm font-bold ${profile?.targetCalories - dayStats.cals >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {profile?.targetCalories - dayStats.cals >= 0 ? '剩餘' : '超標'} {Math.abs(profile?.targetCalories - dayStats.cals)}
+             </span>
+          </div>
+        </div>
+        <Progress current={dayStats.cals} target={profile?.targetCalories} color="bg-emerald-500" />
+
+        <div className="grid grid-cols-3 gap-4 mt-6">
+          <div className="text-center">
+            <p className="text-xs text-slate-400 mb-1">蛋白質</p>
+            <p className="text-lg font-bold text-blue-400">{dayStats.pro}g</p>
+            <p className="text-[10px] text-slate-500">目標 {profile?.protein}g</p>
+            <Progress current={dayStats.pro} target={profile?.protein} color="bg-blue-500" />
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-slate-400 mb-1">碳水</p>
+            <p className="text-lg font-bold text-yellow-400">{dayStats.carbs}g</p>
+            <p className="text-[10px] text-slate-500">目標 {profile?.carbs}g</p>
+            <Progress current={dayStats.carbs} target={profile?.carbs} color="bg-yellow-500" />
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-slate-400 mb-1">脂肪</p>
+            <p className="text-lg font-bold text-red-400">{dayStats.fat}g</p>
+            <p className="text-[10px] text-slate-500">目標 {profile?.fats}g</p>
+            <Progress current={dayStats.fat} target={profile?.fats} color="bg-red-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* --- Suggestion Area --- */}
+      {suggestion && (
+        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-5 rounded-2xl border border-indigo-500/50 relative animate-in slide-in-from-top-4">
+          <button 
+            onClick={() => setSuggestion(null)} 
+            className="absolute top-3 right-3 text-slate-400 hover:text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-white">AI 智能餐點建議</h3>
+          </div>
+          <h4 className="text-xl font-bold text-indigo-300 mb-2">{suggestion.mealName}</h4>
+          <p className="text-slate-300 text-sm mb-3">{suggestion.reason}</p>
+          <div className="bg-black/30 p-3 rounded-lg text-sm text-slate-300 mb-3">
+            <strong>建議食材：</strong> {suggestion.ingredients}
+          </div>
+          <div className="text-xs text-indigo-400 font-mono">
+            {suggestion.estimatedNutrition}
+          </div>
+        </div>
+      )}
+
+      {/* --- Manual Entry Form --- */}
+      {isManualOpen && (
+        <div className="bg-slate-800 p-5 rounded-2xl border border-slate-600 animate-in slide-in-from-top-2">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-white font-bold flex items-center gap-2">
+              <PenTool className="w-5 h-5 text-emerald-400" /> 手動輸入餐點
+            </h3>
+            <button onClick={() => setIsManualOpen(false)} className="text-slate-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">餐點名稱</label>
+              <input 
+                type="text" 
+                placeholder="例如：雞胸肉沙拉"
+                className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-700 focus:border-emerald-500 outline-none"
+                value={manualData.name}
+                onChange={e => setManualData({...manualData, name: e.target.value})}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">用餐時段</label>
+                <select 
+                  className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none"
+                  value={manualData.mealType}
+                  onChange={e => setManualData({...manualData, mealType: e.target.value})}
+                >
+                  <option value="breakfast">早餐</option>
+                  <option value="lunch">午餐</option>
+                  <option value="dinner">晚餐</option>
+                  <option value="snack">點心/額外</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">熱量 (kcal)</label>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none"
+                  value={manualData.calories}
+                  onChange={e => setManualData({...manualData, calories: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">蛋白質 (g)</label>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none"
+                  value={manualData.protein}
+                  onChange={e => setManualData({...manualData, protein: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">碳水 (g)</label>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none"
+                  value={manualData.carbs}
+                  onChange={e => setManualData({...manualData, carbs: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">脂肪 (g)</label>
+                <input 
+                  type="number" 
+                  placeholder="0"
+                  className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none"
+                  value={manualData.fat}
+                  onChange={e => setManualData({...manualData, fat: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <button 
+              onClick={handleManualSubmit}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-bold mt-2"
+            >
+              加入日記
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      {!isManualOpen && (
+        <div className="grid grid-cols-3 gap-2">
+          <button 
+            onClick={() => setIsManualOpen(true)}
+            className="bg-slate-700 hover:bg-slate-600 text-white py-4 rounded-xl font-bold flex flex-col items-center justify-center gap-1 shadow-lg transition-all"
+          >
+            <PenTool className="w-5 h-5 text-emerald-400" />
+            <span className="text-xs">手動輸入</span>
+          </button>
+
+          <button 
+            onClick={() => fileInputRef.current.click()}
+            disabled={isAnalyzing}
+            className="bg-slate-700 hover:bg-slate-600 text-white py-4 rounded-xl font-bold flex flex-col items-center justify-center gap-1 shadow-lg transition-all"
+          >
+            {isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5 text-blue-400" />}
+            <span className="text-xs">{isAnalyzing ? "分析中..." : "拍照記錄"}</span>
+          </button>
+          
+          <button 
+            onClick={getMealSuggestion}
+            disabled={isSuggesting}
+            className="bg-gradient-to-br from-indigo-600 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white py-4 rounded-xl font-bold flex flex-col items-center justify-center gap-1 shadow-lg transition-all"
+          >
+            {isSuggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <ChefHat className="w-5 h-5 text-yellow-300" />}
+            <span className="text-xs">{isSuggesting ? "思考中..." : "AI 建議"}</span>
+          </button>
+
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            accept="image/*"
+            onChange={handleImageUpload}
+          />
+        </div>
+      )}
+
+      {/* Food Log List */}
+      <div className="space-y-3 pb-20">
+        <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+          <Utensils className="w-5 h-5 text-slate-400" /> 今日餐點
+        </h3>
+        {logs.length === 0 ? (
+          <div className="text-center p-8 border-2 border-dashed border-slate-700 rounded-xl">
+            <p className="text-slate-500">今天還沒紀錄喔！</p>
+          </div>
+        ) : (
+          logs.map((log) => (
+            <div key={log.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center group">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-white font-medium text-lg">{log.name}</h4>
+                  {log.mealType && (
+                    <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full uppercase">
+                      {log.mealType === 'breakfast' ? '早餐' : 
+                       log.mealType === 'lunch' ? '午餐' : 
+                       log.mealType === 'dinner' ? '晚餐' : 
+                       log.mealType === 'snack' ? '點心' : '自動'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-3 text-sm text-slate-400 mt-1">
+                  <span className="text-emerald-400 font-bold">{log.calories} kcal</span>
+                  <span>P: {log.protein}g</span>
+                  <span>C: {log.carbs}g</span>
+                  <span>F: {log.fat}g</span>
+                </div>
+                {log.note && <p className="text-xs text-slate-500 mt-1 italic">{log.note}</p>}
+              </div>
+              <button 
+                onClick={() => deleteLog(log.id)}
+                className="p-2 text-slate-600 hover:text-red-400 hover:bg-slate-700 rounded-full transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 3. Reports with AI Analysis & Weight Tracker
+const Reports = ({ user, profile, apiKey }) => {
+  const [reportData, setReportData] = useState([]);
+  const [average, setAverage] = useState({ cals: 0, pro: 0 });
+  const [analysis, setAnalysis] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Weight Tracker States
+  const [weightLogs, setWeightLogs] = useState([]);
+  const [currentWeight, setCurrentWeight] = useState("");
+
+  useEffect(() => {
+    if(!user) return;
+    
+    // 1. Diet Logs
+    const qLogs = query(collection(db, 'artifacts', appId, 'users', user.uid, 'logs'), orderBy('date', 'desc'));
+    const unsubscribeLogs = onSnapshot(qLogs, (snapshot) => {
+      const allLogs = snapshot.docs.map(d => d.data());
+      const grouped = allLogs.reduce((acc, curr) => {
+        if (!acc[curr.date]) {
+          acc[curr.date] = { date: curr.date, cals: 0, pro: 0, carbs: 0, fat: 0 };
+        }
+        acc[curr.date].cals += (curr.calories || 0);
+        acc[curr.date].pro += (curr.protein || 0);
+        acc[curr.date].carbs += (curr.carbs || 0);
+        acc[curr.date].fat += (curr.fat || 0);
+        return acc;
+      }, {});
+      const sortedDays = Object.values(grouped).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-7);
+      setReportData(sortedDays);
+      if (sortedDays.length > 0) {
+        const totalCals = sortedDays.reduce((sum, d) => sum + d.cals, 0);
+        const totalPro = sortedDays.reduce((sum, d) => sum + d.pro, 0);
+        setAverage({
+          cals: Math.round(totalCals / sortedDays.length),
+          pro: Math.round(totalPro / sortedDays.length)
+        });
+      }
+    });
+
+    // 2. Weight Logs (New Collection)
+    const qWeight = query(collection(db, 'artifacts', appId, 'users', user.uid, 'weight_logs'), orderBy('date', 'asc'));
+    const unsubscribeWeight = onSnapshot(qWeight, (snapshot) => {
+      const wLogs = snapshot.docs.map(d => d.data());
+      setWeightLogs(wLogs);
+    });
+
+    return () => {
+      unsubscribeLogs();
+      unsubscribeWeight();
+    };
+  }, [user]);
+
+  const handleAddWeight = async () => {
+    if (!currentWeight) return;
+    const today = new Date().toISOString().split('T')[0];
+    
+    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'weight_logs'), {
+      date: today,
+      weight: Number(currentWeight),
+      timestamp: new Date().toISOString()
+    });
+    setCurrentWeight("");
+  };
+
+  const handleAnalyze = async () => {
+    if (reportData.length === 0) return;
+    if (!apiKey) {
+      alert("全域 AI Key 尚未設定。請通知管理員至 Firebase Console 設定 Key。");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysis("");
+
+    try {
+      const prompt = `
+        你是一位專業的運動營養教練。請分析學生過去 7 天的飲食數據：
+        ${JSON.stringify(reportData)}
+        體重紀錄：${JSON.stringify(weightLogs.slice(-5))}
+        他的目標是：${profile.goal === 'cut' ? '減脂' : '增肌'}。
+        每日目標：熱量 ${profile.targetCalories}, 蛋白質 ${profile.protein}g。
+        請用繁體中文給出 3 點簡短的分析與建議。語氣要專業、鼓勵，並指出具體可以改進的地方（例如週末是否鬆懈了？蛋白質是否穩定達標？體重趨勢如何？）。
+        直接輸出文字即可，不需要 JSON。
+      `;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        }
+      );
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      setAnalysis(text);
+
+    } catch (error) {
+      console.error("Analysis Error", error);
+      alert("分析失敗，請檢查 API Key 或重試。");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Weight Tracker Section */}
+      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Scale className="w-5 h-5 text-emerald-400" /> 體重追蹤
+        </h2>
+        
+        <div className="flex gap-2 mb-4">
+          <input 
+            type="number" 
+            placeholder="今日體重 (kg)" 
+            className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none"
+            value={currentWeight}
+            onChange={(e) => setCurrentWeight(e.target.value)}
+          />
+          <button 
+            onClick={handleAddWeight}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 rounded-lg font-bold"
+          >
+            記錄
+          </button>
+        </div>
+
+        {/* Simple Weight Chart */}
+        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 min-h-[200px]">
+           <h3 className="text-xs text-slate-400 mb-2">近期體重趨勢</h3>
+           <SimpleLineChart data={weightLogs} />
+        </div>
+      </div>
+
+      {/* Diet Summary Section */}
+      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-emerald-400" /> 飲食週報
+        </h2>
+
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+            <p className="text-slate-400 text-sm">平均攝取熱量</p>
+            <p className="text-2xl font-bold text-white mt-1">{average.cals}</p>
+            <p className="text-xs text-slate-500 mt-1">目標: {profile?.targetCalories}</p>
+          </div>
+          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+            <p className="text-slate-400 text-sm">平均蛋白質</p>
+            <p className="text-2xl font-bold text-blue-400 mt-1">{average.pro}g</p>
+            <p className="text-xs text-slate-500 mt-1">目標: {profile?.protein}g</p>
+          </div>
+        </div>
+
+        <h3 className="text-white font-medium mb-4">近 7 天趨勢</h3>
+        <div className="space-y-4 mb-6">
+          {reportData.map((day) => (
+            <div key={day.date} className="bg-slate-700/30 p-3 rounded-lg">
+              <div className="flex justify-between text-sm text-slate-300 mb-2">
+                <span>{day.date}</span>
+                <span className={day.cals > profile?.targetCalories ? "text-red-400" : "text-emerald-400"}>
+                  {day.cals} kcal
+                </span>
+              </div>
+              <div className="w-full h-2 bg-slate-700 rounded-full flex overflow-hidden">
+                <div 
+                  className="bg-blue-500 h-full" 
+                  style={{ width: `${(day.pro * 4 / day.cals) * 100}%` }} 
+                  title="Protein"
+                />
+                <div 
+                  className="bg-yellow-500 h-full" 
+                  style={{ width: `${(day.carbs * 4 / day.cals) * 100}%` }}
+                  title="Carbs"
+                />
+                <div 
+                  className="bg-red-500 h-full" 
+                  style={{ width: `${(day.fat * 9 / day.cals) * 100}%` }}
+                  title="Fat"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* AI Analysis Section */}
+        <div className="border-t border-slate-700 pt-6">
+          <button 
+            onClick={handleAnalyze}
+            disabled={isAnalyzing || reportData.length === 0}
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50"
+          >
+            {isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageSquare className="w-5 h-5" />}
+            {isAnalyzing ? "教練分析中..." : "✨ AI 教練週報分析"}
+          </button>
+          
+          {analysis && (
+            <div className="mt-4 bg-slate-900/50 p-4 rounded-xl border border-blue-500/30">
+              <div className="flex items-center gap-2 mb-2 text-blue-400 font-bold">
+                <Sparkles className="w-4 h-4" /> 教練回饋：
+              </div>
+              <div className="text-slate-300 text-sm whitespace-pre-line leading-relaxed">
+                {analysis}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Main App Component ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [apiKey, setApiKey] = useState(DEFAULT_API_KEY);
+  const [view, setView] = useState('diary'); // settings, diary, reports
+  const [isChatOpen, setIsChatOpen] = useState(false); // State for chat modal
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    // Check initial auth token only once
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      }
+    };
+    initAuth();
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsLoggingIn(false);
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    // 2. Fetch Profile & Public API Key if user exists
+    if (!user) return;
+    
+    const fetchData = async () => {
+      // Profile
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setProfile(docSnap.data());
+      } else {
+        setView('settings'); // First time user
+      }
+
+      // GLOBAL API Key Settings (Fetch from public/data/config/settings)
+      // This is the key change: everyone reads from the same public location
+      const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'settings');
+      const configSnap = await getDoc(configRef);
+      if (configSnap.exists() && configSnap.data().gemini_api_key) {
+        setApiKey(configSnap.data().gemini_api_key);
+      }
+    };
+    fetchData();
+  }, [user]);
+
+  const saveProfile = async (newProfile) => {
+    if (!user) return;
+    // Save Profile Only (Key is handled manually in console now)
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main'), newProfile);
+    setProfile(newProfile);
+    // setView('diary'); // Optional: stay to see confirmation
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true);
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login failed", error);
+      alert("登入失敗，請稍後再試。");
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      await signInAnonymously(auth);
+    } catch (error) {
+      console.error("Guest login failed", error);
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    setProfile(null);
+    setApiKey(DEFAULT_API_KEY);
+  };
+
+  if (!user) {
+    return <LoginScreen onGuestLogin={handleGuestLogin} onGoogleLogin={handleGoogleLogin} isLoggingIn={isLoggingIn} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-200 font-sans pb-20 relative">
+      {/* Header */}
+      <header className="bg-slate-800/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-700 px-4 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <div className="bg-emerald-500 p-2 rounded-lg">
+            <Activity className="w-5 h-5 text-slate-900" />
+          </div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+            IronFuel
+          </h1>
+        </div>
+        <div className="flex items-center gap-3">
+          {profile && (
+            <div className="text-xs text-right">
+              <p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p>
+              <p className="text-slate-500">{profile.goal === 'cut' ? '減脂' : '增肌'}</p>
+            </div>
+          )}
+          <button 
+            onClick={handleLogout}
+            className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors"
+            title="登出"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="p-4 max-w-md mx-auto">
+        {view === 'settings' && (
+          <SettingsScreen 
+            user={user} 
+            profile={profile} 
+            setProfile={setProfile} 
+            hasApiKey={!!apiKey && apiKey.length > 0}
+            onSave={saveProfile} 
+          />
+        )}
+        
+        {view === 'diary' && profile && (
+          <FoodDiary user={user} profile={profile} apiKey={apiKey} />
+        )}
+
+        {view === 'reports' && profile && (
+          <Reports user={user} profile={profile} apiKey={apiKey} />
+        )}
+      </main>
+
+      {/* Chat Button (Floating) */}
+      {profile && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-24 right-4 bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-2xl shadow-emerald-900/50 z-40 transition-transform hover:scale-110 active:scale-95"
+        >
+          <MessageCircle className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* AI Chat Modal */}
+      {profile && (
+        <AIChatModal 
+          isOpen={isChatOpen} 
+          onClose={() => setIsChatOpen(false)}
+          profile={profile}
+          dayStats={{ cals: 0, pro: 0, carbs: 0, fat: 0 }} 
+          apiKey={apiKey}
+        />
+      )}
+
+      {/* Bottom Navigation */}
+      {profile && (
+        <nav className="fixed bottom-0 left-0 w-full bg-slate-800 border-t border-slate-700 pb-safe z-30">
+          <div className="flex justify-around max-w-md mx-auto">
+            <button 
+              onClick={() => setView('settings')}
+              className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'settings' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Settings className="w-6 h-6" />
+              設定
+            </button>
+            <button 
+              onClick={() => setView('diary')}
+              className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'diary' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Utensils className="w-6 h-6" />
+              日記
+            </button>
+            <button 
+              onClick={() => setView('reports')}
+              className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'reports' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <BarChart3 className="w-6 h-6" />
+              報表
+            </button>
+          </div>
+        </nav>
+      )}
+    </div>
+  );
+}
