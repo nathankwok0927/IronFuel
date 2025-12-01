@@ -49,6 +49,10 @@
       /* 隱藏 Scrollbar 但保持功能 */
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+      /* 動畫 */
+      @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px rgba(16, 185, 129, 0.5); } 50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.8); } }
+      .ai-glow { animation: pulse-glow 2s infinite; }
     </style>
 </head>
 <body>
@@ -125,7 +129,139 @@
             catch (e) { console.warn("Switching to 1.5 Flash...", e); return await tryFetch("gemini-1.5-flash"); }
         };
 
-        // --- Login Screen ---
+        // --- Helper Components ---
+        const SimpleLineChart = ({ data, color = "#10b981", labelKey = "weight" }) => {
+            if (!data || data.length < 2) return (<div className="h-40 flex items-center justify-center text-slate-500 text-xs border border-slate-700 border-dashed rounded-lg">至少需要兩筆記錄才能顯示趨勢圖</div>);
+            const values = data.map(d => d[labelKey]);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = max - min || 1;
+            const points = data.map((d, i) => {
+                const x = (i / (data.length - 1)) * 100;
+                const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
+                return `${x},${y}`;
+            }).join(' ');
+            return (
+                <div className="w-full h-40 relative mt-4">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polyline fill="none" stroke={color} strokeWidth="2" points={points} vectorEffect="non-scaling-stroke" />
+                    {data.map((d, i) => {
+                        const x = (i / (data.length - 1)) * 100;
+                        const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
+                        return <circle key={i} cx={x} cy={y} r="2" fill="#1e293b" stroke={color} strokeWidth="1" vectorEffect="non-scaling-stroke" />;
+                    })}
+                </svg>
+                <div className="absolute top-0 left-0 text-[10px] text-slate-500 -mt-5">{max}kg</div>
+                <div className="absolute bottom-0 left-0 text-[10px] text-slate-500 -mb-5">{min}kg</div>
+                </div>
+            );
+        };
+
+        // --- Sub-Components Definitions (Missing ones restored here) ---
+        
+        const WaterTracker = ({ user, date }) => {
+            const [water, setWater] = useState(0);
+            const [target, setTarget] = useState(2500);
+            useEffect(() => {
+                if (!user) return;
+                const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'water_logs', date);
+                const unsubscribe = onSnapshot(docRef, (docSnap) => {
+                    if (docSnap.exists()) { setWater(docSnap.data().amount || 0); if(docSnap.data().target) setTarget(docSnap.data().target); } else { setWater(0); }
+                });
+                return () => unsubscribe();
+            }, [user, date]);
+            const addWater = async (amount) => { const newAmount = Math.max(0, water + amount); await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'water_logs', date), { amount: newAmount, target: target, date: date }, { merge: true }); };
+            const progress = Math.min(100, (water / target) * 100);
+            return (<div className="bg-blue-900/30 border border-blue-500/30 p-4 rounded-2xl mb-6"><div className="flex justify-between items-center mb-3"><h3 className="text-blue-400 font-bold flex items-center gap-2"><Droplets className="w-5 h-5" /> 喝水紀錄</h3><span className="text-xs text-blue-300">{water} / {target} ml</span></div><div className="w-full bg-slate-800 rounded-full h-4 mb-4 overflow-hidden relative"><div className="bg-blue-500 h-full transition-all duration-500 relative" style={{ width: `${progress}%` }}><div className="absolute top-0 left-0 w-full h-full bg-white/20 animate-pulse"></div></div></div><div className="flex gap-3 justify-between"><button onClick={() => addWater(-250)} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-mono">-250ml</button><button onClick={() => addWater(250)} className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/50 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 喝一杯 (250ml)</button></div></div>);
+        };
+
+        const PeriodizationPlanner = ({ profile }) => {
+             const phases = [
+                 { name: "適應期", duration: 4, focus: "建立習慣、消水腫", color: "text-emerald-400", border: "border-emerald-500/30" },
+                 { name: "燃脂期", duration: 4, focus: "最大化熱量赤字、重訓保肌", color: "text-blue-400", border: "border-blue-500/30" },
+                 { name: "衝刺期", duration: 4, focus: "頑固脂肪、最後修飾", color: "text-purple-400", border: "border-purple-500/30" }
+             ];
+             return (<div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 mt-6"><h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Flag className="w-5 h-5 text-yellow-400" /> 減脂週期規劃</h2><div className="space-y-3">{phases.map((phase, idx) => { const startWeek = idx * 4 + 1; const endWeek = (idx + 1) * 4; return (<div key={idx} className={`p-3 rounded-xl bg-slate-900/50 border ${phase.border} flex justify-between items-center`}><div><div className={`font-bold text-sm ${phase.color}`}>{phase.name}</div><div className="text-[10px] text-slate-500">第 {startWeek} - {endWeek} 週</div></div><div className="text-right"><div className="text-xs text-slate-300">{phase.focus}</div></div></div>) })}</div><div className="mt-4 p-3 bg-slate-900 rounded-lg text-xs text-slate-400 border border-slate-800"><p>💡 建議每 4 週重新評估一次 TDEE 與體重。</p></div></div>);
+        };
+
+        const DailyMotivation = ({ profile, apiKey }) => {
+            const [quote, setQuote] = useState("");
+            useEffect(() => {
+                if (!apiKey || !profile) return;
+                const fetchQuote = async () => {
+                    const today = new Date().toDateString();
+                    const saved = localStorage.getItem('ironfuel_quote');
+                    if (saved) { const parsed = JSON.parse(saved); if (parsed.date === today) { setQuote(parsed.text); return; } }
+                    try {
+                        const prompt = `Give me a short, powerful fitness motivational quote in Traditional Chinese for someone whose goal is "${profile.goal}". Max 20 words.`;
+                        const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }] }]);
+                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "堅持就是勝利！";
+                        setQuote(text);
+                        localStorage.setItem('ironfuel_quote', JSON.stringify({ date: today, text }));
+                    } catch (e) { setQuote("今天也要加油！Fuel your fight!"); }
+                };
+                fetchQuote();
+            }, [apiKey, profile]);
+            if (!quote) return null;
+            return (<div className="mb-6 p-4 bg-gradient-to-r from-slate-800 to-slate-900 border-l-4 border-emerald-500 rounded-r-xl shadow-lg animate-in slide-in-from-top-4"><p className="text-sm text-emerald-100 italic font-medium">“{quote}”</p></div>);
+        };
+
+        const InBodyScan = ({ user, apiKey }) => {
+            const [scans, setScans] = useState([]);
+            const [isAnalyzing, setIsAnalyzing] = useState(false);
+            const [lastScanDate, setLastScanDate] = useState(null);
+            const fileInputRef = useRef(null);
+            useEffect(() => {
+                if (!user) return;
+                const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), orderBy('date', 'desc'));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    setScans(logs);
+                    if (logs.length > 0) { setLastScanDate(logs[0].date); }
+                });
+                return () => unsubscribe();
+            }, [user]);
+            const handleUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (!apiKey) { alert("AI 功能未啟用"); return; }
+                setIsAnalyzing(true);
+                try {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onloadend = async () => {
+                        const base64Data = reader.result.split(',')[1];
+                        const prompt = `Analyze this InBody sheet image. Extract: Weight, Skeletal Muscle Mass (SMM), Percent Body Fat (PBF). Also provide a short, encouraging assessment in Traditional Chinese (max 50 words). Return JSON: { "weight": number, "smm": number, "pbf": number, "assessment": string }`;
+                        const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }, { inlineData: { mimeType: file.type, data: base64Data } }] }]);
+                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const result = JSON.parse(jsonStr);
+                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), {
+                            ...result, date: new Date().toISOString().split('T')[0], timestamp: new Date().toISOString()
+                        });
+                        setIsAnalyzing(false); alert("InBody 分析完成！");
+                    };
+                } catch (error) { console.error(error); alert("分析失敗"); setIsAnalyzing(false); }
+            };
+            const deleteScan = async (id) => { if(confirm("確定要刪除此紀錄嗎？")) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs', id)); };
+            let nextScanMsg = "尚未檢測", statusColor = "text-slate-400", daysLeft = 0;
+            if (lastScanDate) {
+                const last = new Date(lastScanDate); const next = new Date(last); next.setDate(last.getDate() + 30);
+                daysLeft = Math.ceil((next - new Date()) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 0) { nextScanMsg = "⚠️ 已過期！請儘快檢測"; statusColor = "text-red-400"; } else { nextScanMsg = `還有 ${daysLeft} 天`; statusColor = "text-emerald-400"; }
+            }
+            return (
+                <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+                    <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+                        <div className="flex justify-between items-start mb-4"><div><h2 className="text-xl font-bold text-white flex items-center gap-2"><ScanLine className="w-5 h-5 text-blue-400" /> InBody 追蹤</h2><p className="text-xs text-slate-400 mt-1">定期追蹤身體組成變化</p></div><div className="text-right"><p className="text-[10px] text-slate-500">下次檢測</p><p className={`text-sm font-bold ${statusColor}`}>{nextScanMsg}</p></div></div>
+                        <button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50">{isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}{isAnalyzing ? "AI 分析報告中..." : "上傳本月報告 (AI 分析)"}</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
+                    </div>
+                    <div className="space-y-4"><h3 className="text-white font-semibold text-sm ml-1">歷史紀錄</h3>{scans.length === 0 ? (<div className="text-center p-8 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 text-xs">尚無紀錄，請上傳您的第一份 InBody 報告。</div>) : (scans.map(scan => (<div key={scan.id} className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl relative group"><div className="flex justify-between items-center mb-2"><span className="text-emerald-400 font-mono font-bold">{scan.date}</span><button onClick={() => deleteScan(scan.id)} className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></button></div><div className="grid grid-cols-3 gap-2 mb-3 text-center"><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">體重</p><p className="text-white font-bold">{scan.weight}kg</p></div><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">骨骼肌</p><p className="text-blue-400 font-bold">{scan.smm}kg</p></div><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">體脂</p><p className="text-yellow-400 font-bold">{scan.pbf}%</p></div></div>{scan.assessment && (<div className="text-xs text-slate-300 bg-slate-800 p-3 rounded-lg italic border-l-2 border-blue-500">" {scan.assessment} "</div>)}</div>)))}</div>
+                </div>
+            );
+        };
+
+        // --- Main Screens ---
         const LoginScreen = ({ onGuestLogin, onGoogleLogin, isLoggingIn }) => (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
             <div className="z-10 w-full max-w-md bg-slate-800/90 backdrop-blur-xl p-8 rounded-3xl border border-slate-700 shadow-2xl text-center">
@@ -142,7 +278,6 @@
             </div>
         );
 
-        // --- AI Chat Modal ---
         const AIChatModal = ({ isOpen, onClose, profile, dayStats, apiKey }) => {
             const [messages, setMessages] = useState([{ role: 'model', text: '你好！我是你的 AI 健身教練。關於飲食、訓練或營養，有什麼我可以幫你的嗎？' }]);
             const [input, setInput] = useState('');
@@ -174,118 +309,53 @@
             );
         };
 
-        // --- 週期規劃元件 (修復版：加入日期與視覺化) ---
-        const PeriodizationPlanner = ({ profile }) => {
-             // 簡單計算未來日期
-             const getPhaseDate = (weeks) => {
-                 const today = new Date();
-                 const target = new Date(today.setDate(today.getDate() + (weeks * 7)));
-                 return target.toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric'});
-             };
-
-             const phases = [
-                 { name: "適應期", weeks: "第 1-4 週", focus: "建立習慣、消水腫", color: "bg-emerald-500", text: "text-emerald-400", border: "border-emerald-500/30", end: getPhaseDate(4) },
-                 { name: "燃脂期", weeks: "第 5-8 週", focus: "最大化赤字、重訓", color: "bg-blue-500", text: "text-blue-400", border: "border-blue-500/30", end: getPhaseDate(8) },
-                 { name: "衝刺期", weeks: "第 9-12 週", focus: "最後修飾、去頑固脂肪", color: "bg-purple-500", text: "text-purple-400", border: "border-purple-500/30", end: getPhaseDate(12) }
-             ];
-
-             return (
-                 <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 mt-6">
-                     <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                         <Flag className="w-5 h-5 text-yellow-400" /> 減脂週期規劃
-                     </h2>
-                     <div className="relative border-l-2 border-slate-700 ml-3 space-y-6">
-                         {phases.map((phase, idx) => (
-                             <div key={idx} className="ml-6 relative">
-                                 <div className={`absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 border-slate-800 ${phase.color}`}></div>
-                                 <div className={`p-3 rounded-xl bg-slate-900/50 border ${phase.border}`}>
-                                     <div className="flex justify-between items-center mb-1">
-                                         <span className={`font-bold text-sm ${phase.text}`}>{phase.name}</span>
-                                         <span className="text-xs text-slate-500">{phase.weeks}</span>
-                                     </div>
-                                     <p className="text-xs text-slate-300 mb-2">{phase.focus}</p>
-                                     <div className="flex justify-between items-end">
-                                         <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-1 rounded">預計完成: {phase.end}</span>
-                                     </div>
-                                 </div>
-                             </div>
-                         ))}
-                     </div>
-                 </div>
-             );
-        };
-
-        // --- 設定頁面 (修復版：找回消失的輸入框、中文化按鈕) ---
         const SettingsScreen = ({ user, profile, setProfile, onSave, hasApiKey }) => {
-            const [formData, setFormData] = useState(profile || { 
-                height: 171, weight: 80, age: 30, gender: 'male', activityLevel: '1.55', goal: 'cut', bodyFat: 21 
-            });
+            const [formData, setFormData] = useState(profile || { height: 171, weight: 80, age: 30, gender: 'male', activityLevel: '1.55', goal: 'cut', bodyFat: 21 });
             const [isSaving, setIsSaving] = useState(false);
             const [saveMessage, setSaveMessage] = useState("");
             const [showAdmin, setShowAdmin] = useState(false);
-
             const calculateTDEE = () => {
                 let bmr = (10 * formData.weight) + (6.25 * formData.height) - (5 * formData.age);
+                // 關鍵修正：加入性別判斷
                 bmr += formData.gender === 'male' ? 5 : -161;
+                
                 const tdee = Math.round(bmr * parseFloat(formData.activityLevel));
                 let targetCalories = tdee;
                 let protein = 0, carbs = 0, fats = 0;
-
-                // 根據目標調整
-                if (formData.goal === 'cut') { 
-                    targetCalories = tdee - 500; 
-                    protein = Math.round(formData.weight * 2.2); 
-                    fats = Math.round(formData.weight * 0.9); 
-                } else if (formData.goal === 'bulk') { 
-                    targetCalories = tdee + 300; 
-                    protein = Math.round(formData.weight * 2.0); 
-                    fats = Math.round(formData.weight * 1.0); 
-                } else { 
-                    // maintain
-                    protein = Math.round(formData.weight * 1.8); 
-                    fats = Math.round(formData.weight * 1.0); 
-                }
-                
+                if (formData.goal === 'cut') { targetCalories = tdee - 500; protein = Math.round(formData.weight * 2.2); fats = Math.round(formData.weight * 0.9); } 
+                else if (formData.goal === 'bulk') { targetCalories = tdee + 300; protein = Math.round(formData.weight * 2.0); fats = Math.round(formData.weight * 1.0); } 
+                else { protein = Math.round(formData.weight * 1.8); fats = Math.round(formData.weight * 1.0); }
                 const remainingCals = targetCalories - (protein * 4) - (fats * 9);
                 carbs = Math.max(0, Math.round(remainingCals / 4));
                 return { tdee, targetCalories, protein, carbs, fats };
             };
-
             const results = calculateTDEE();
-
             const handleSave = async () => {
                 setIsSaving(true); setSaveMessage("");
                 await onSave({ ...formData, ...results });
-                setIsSaving(false); setSaveMessage("✅ 設定已更新！"); setTimeout(() => setSaveMessage(""), 3000);
+                setIsSaving(false); setSaveMessage("✅ 身體數據已更新！"); setTimeout(() => setSaveMessage(""), 3000);
             };
-            const handleCopy = (text) => { navigator.clipboard.writeText(text); alert("已複製"); };
-
+            const handleCopy = (text, label) => { navigator.clipboard.writeText(text); alert(`${label} 已複製！`); }
             return (
                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                
-                {/* 頂部狀態 */}
-                <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
-                        <Activity className="w-5 h-5" /> 身體數據設定
-                    </h2>
-                    {hasApiKey ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-900/30 rounded-full border border-emerald-500/30">
-                            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div><span className="text-[10px] text-emerald-300 font-medium">AI 連線</span>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 rounded-full border border-slate-700">
-                            <div className="w-2 h-2 rounded-full bg-slate-500"></div><span className="text-[10px] text-slate-400 font-medium">AI 離線</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* 數據輸入卡片 (修復：補回所有欄位) */}
+                <div className="flex items-center justify-between"><h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2"><Activity className="w-5 h-5" /> 身體數據設定</h2>{hasApiKey ? (<div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-900/30 rounded-full border border-emerald-500/30"><div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div><span className="text-[10px] text-emerald-300 font-medium">AI 已連線</span></div>) : (<div className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 rounded-full border border-slate-700"><div className="w-2 h-2 rounded-full bg-slate-500"></div><span className="text-[10px] text-slate-400 font-medium">AI 離線</span></div>)}</div>
                 <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+                    {/* 新增：性別選擇 */}
                     <div className="mb-4">
-                        <label className="text-slate-400 text-xs uppercase tracking-wider block mb-1">生理性別</label>
+                        <label className="text-slate-400 text-xs uppercase tracking-wider block mb-1">生理性別 (影響 TDEE 計算)</label>
                         <div className="flex gap-2">
-                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.gender === 'male' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>男性</button>
-                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.gender === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-700 text-slate-400'}`}>女性</button>
+                            <button 
+                                onClick={() => setFormData({...formData, gender: 'male'})}
+                                className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.gender === 'male' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                            >
+                                男性 (Male)
+                            </button>
+                            <button 
+                                onClick={() => setFormData({...formData, gender: 'female'})}
+                                className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.gender === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                            >
+                                女性 (Female)
+                            </button>
                         </div>
                     </div>
 
@@ -339,7 +409,6 @@
             );
         };
 
-        // --- 其他頁面 (FoodDiary, Reports, InBody) 維持不變，但需確保引入 Recharts ---
         const FoodDiary = ({ user, profile, apiKey }) => {
             const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
             const [logs, setLogs] = useState([]);
@@ -408,14 +477,13 @@
                     const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }] }]);
                     const jsonStr = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
                     setSuggestion(JSON.parse(jsonStr));
-                } catch (e) { alert("AI 思考超時"); } finally { setIsSuggesting(false); }
+                } catch (error) { alert("AI 思考超時"); } finally { setIsSuggesting(false); }
             };
             const Progress = ({ current, target, color }) => { const pct = Math.min((current / target) * 100, 100); return <div className="w-full bg-slate-700 rounded-full h-2 mt-1"><div className={`h-2 rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} /></div>; };
 
             return (
                 <div className="space-y-6">
                     <DailyMotivation profile={profile} apiKey={apiKey} />
-                    {/* ... (上方的日期、喝水元件保持不變) ... */}
                     <div className="flex items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700">
                         <button className="p-2 hover:bg-slate-700 rounded-lg" onClick={() => { const d = new Date(date); d.setDate(d.getDate() - 1); setDate(d.toISOString().split('T')[0]); }}><ChevronRight className="w-5 h-5 rotate-180" /></button>
                         <div className="flex items-center gap-2 font-bold"><CalendarIcon className="w-5 h-5 text-emerald-500" />{date}</div>
@@ -442,7 +510,6 @@
             );
         };
 
-        // --- 報表頁面 (使用 Recharts 修復版) ---
         const Reports = ({ user, profile, apiKey }) => {
             const [reportData, setReportData] = useState([]);
             const [average, setAverage] = useState({ cals: 0, pro: 0 });
@@ -465,7 +532,6 @@
                         acc[curr.date].fat += (curr.fat || 0);
                         return acc;
                     }, {});
-                    // 取最近 7 天並排序
                     const sortedDays = Object.values(grouped)
                         .sort((a, b) => new Date(a.date) - new Date(b.date))
                         .slice(-7);
@@ -481,7 +547,6 @@
                     const wLogs = snapshot.docs.map(d => ({ ...d.data(), dateShort: d.data().date.substring(5) })); 
                     setWeightLogs(wLogs); 
                     if (wLogs.length > 0) {
-                        // 週期計算邏輯 (同前)
                         const sortedWeights = [...wLogs];
                         const latest = sortedWeights[sortedWeights.length - 1];
                         const today = new Date();
@@ -569,7 +634,6 @@
                         </div>
                     )}
                     
-                    {/* 飲食摘要 & AI 分析按鈕 */}
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
                         <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-400" /> 飲食週報</h2>
                         <div className="grid grid-cols-2 gap-4 mb-8 text-center">
@@ -589,59 +653,6 @@
             );
         };
 
-        const InBodyScan = ({ user, apiKey }) => {
-            const [scans, setScans] = useState([]);
-            const [isAnalyzing, setIsAnalyzing] = useState(false);
-            const [lastScanDate, setLastScanDate] = useState(null);
-            const fileInputRef = useRef(null);
-            useEffect(() => {
-                if (!user) return;
-                return onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), orderBy('date', 'desc')), (snapshot) => {
-                    const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                    setScans(logs);
-                    if (logs.length > 0) { setLastScanDate(logs[0].date); }
-                });
-            }, [user]);
-            const handleUpload = async (e) => {
-                const file = e.target.files[0];
-                if (!file || !apiKey) return;
-                setIsAnalyzing(true);
-                try {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onloadend = async () => {
-                        const base64Data = reader.result.split(',')[1];
-                        const prompt = `Analyze this InBody sheet image. Extract: Weight, Skeletal Muscle Mass (SMM), Percent Body Fat (PBF). Also provide a short, encouraging assessment in Traditional Chinese (max 50 words). Return JSON: { "weight": number, "smm": number, "pbf": number, "assessment": string }`;
-                        const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }, { inlineData: { mimeType: file.type, data: base64Data } }] }]);
-                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                        const result = JSON.parse(jsonStr);
-                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), {
-                            ...result, date: new Date().toISOString().split('T')[0], timestamp: new Date().toISOString()
-                        });
-                        setIsAnalyzing(false); alert("InBody 分析完成！");
-                    };
-                } catch (error) { console.error(error); alert("分析失敗"); setIsAnalyzing(false); }
-            };
-            const deleteScan = async (id) => { if(confirm("確定要刪除此紀錄嗎？")) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs', id)); };
-            let nextScanMsg = "尚未檢測", statusColor = "text-slate-400", daysLeft = 0;
-            if (lastScanDate) {
-                const last = new Date(lastScanDate); const next = new Date(last); next.setDate(last.getDate() + 30);
-                daysLeft = Math.ceil((next - new Date()) / (1000 * 60 * 60 * 24));
-                if (daysLeft <= 0) { nextScanMsg = "⚠️ 已過期！請儘快檢測"; statusColor = "text-red-400"; } else { nextScanMsg = `還有 ${daysLeft} 天`; statusColor = "text-emerald-400"; }
-            }
-            return (
-                <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                    <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
-                        <div className="flex justify-between items-start mb-4"><div><h2 className="text-xl font-bold text-white flex items-center gap-2"><ScanLine className="w-5 h-5 text-blue-400" /> InBody 追蹤</h2><p className="text-xs text-slate-400 mt-1">定期追蹤身體組成變化</p></div><div className="text-right"><p className="text-[10px] text-slate-500">下次檢測</p><p className={`text-sm font-bold ${statusColor}`}>{nextScanMsg}</p></div></div>
-                        <button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50">{isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}{isAnalyzing ? "AI 分析報告中..." : "上傳本月報告 (AI 分析)"}</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
-                    </div>
-                    <div className="space-y-4"><h3 className="text-white font-semibold text-sm ml-1">歷史紀錄</h3>{scans.length === 0 ? (<div className="text-center p-8 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 text-xs">尚無紀錄，請上傳您的第一份 InBody 報告。</div>) : (scans.map(scan => (<div key={scan.id} className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl relative group"><div className="flex justify-between items-center mb-2"><span className="text-emerald-400 font-mono font-bold">{scan.date}</span><button onClick={() => deleteScan(scan.id)} className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></button></div><div className="grid grid-cols-3 gap-2 mb-3 text-center"><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">體重</p><p className="text-white font-bold">{scan.weight}kg</p></div><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">骨骼肌</p><p className="text-blue-400 font-bold">{scan.smm}kg</p></div><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">體脂</p><p className="text-yellow-400 font-bold">{scan.pbf}%</p></div></div>{scan.assessment && (<div className="text-xs text-slate-300 bg-slate-800 p-3 rounded-lg italic border-l-2 border-blue-500">" {scan.assessment} "</div>)}</div>)))}</div>
-                </div>
-            );
-        };
-
-        // --- App Component ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
@@ -682,7 +693,7 @@
                     <header className="bg-slate-800/80 sticky top-0 z-10 border-b border-slate-700 px-4 py-4 flex justify-between items-center">
                         <div className="flex items-center gap-2"><div className="bg-emerald-500 p-2 rounded-lg"><Activity className="text-slate-900 w-5 h-5" /></div><h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">IronFuel</h1></div>
                         <div className="flex gap-3">
-                            {profile && <div className="text-right text-xs"><p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p><p className="text-slate-500">{profile.goal === 'cut' ? '減脂' : profile.goal === 'bulk' ? '增肌' : '維持'}</p></div>}
+                            {profile && <div className="text-right text-xs"><p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p><p className="text-slate-500">{profile.goal === 'cut' ? '減脂' : '增肌'}</p></div>}
                             <button onClick={() => setIsMobileFit(!isMobileFit)} className={`p-2 rounded-lg ${isMobileFit ? 'bg-emerald-600' : 'bg-slate-700'}`}><Smartphone className="w-4 h-4" /></button>
                             <button onClick={() => signOut(auth)} className="p-2 bg-slate-700 rounded-lg"><LogOut className="w-4 h-4" /></button>
                         </div>
