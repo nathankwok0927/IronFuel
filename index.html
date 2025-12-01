@@ -11,13 +11,14 @@
     <!-- 引入 Babel 用於解析 JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 設定 Import Map 以使用模組 -->
+    <!-- 設定 Import Map 以使用模組 (新增 Recharts) -->
     <script type="importmap">
     {
       "imports": {
         "react": "https://esm.sh/react@18.2.0",
         "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
         "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+        "recharts": "https://esm.sh/recharts@2.10.3",
         "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
         "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
         "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
@@ -27,20 +28,27 @@
 
     <style>
       body { margin: 0; padding: 0; background-color: #0f172a; color: white; }
+      
+      /* 背景圖層設定 */
       #bg-layer {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
         background-image: url('./bg.jpg'); background-repeat: no-repeat;
         background-size: cover; background-position: center center; transition: all 0.5s ease;
       }
+      /* 手機版背景置底 */
       #bg-layer.mobile-fit {
         background-size: contain !important; background-position: bottom center !important; background-color: #0f172a; 
       }
+      
       #root {
         background-color: rgba(15, 23, 42, 0.85); min-height: 100vh; width: 100%; position: relative; padding-bottom: 100px;
       }
+      
       .loading { display: flex; justify-content: center; align-items: center; height: 100vh; color: #10b981; font-weight: bold; }
-      @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px rgba(16, 185, 129, 0.5); } 50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.8); } }
-      .ai-glow { animation: pulse-glow 2s infinite; }
+      
+      /* 隱藏 Scrollbar 但保持功能 */
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -56,8 +64,10 @@
             FileText, Sparkles, ChefHat, MessageSquare, X, PenTool, Scale, MessageCircle, 
             Send, Bot, Key, LogOut, User, LogIn, Settings, Eye, EyeOff, CheckCircle2, 
             AlertTriangle, Copy, Database, Globe, Lock, ChevronDown, ChevronUp, Smartphone,
-            Droplets, Flag, ArrowRight, Wand2, RefreshCcw, Trophy, ClipboardList, ScanLine
+            Droplets, Flag, ArrowRight, Wand2, RefreshCcw, Trophy, ClipboardList, ScanLine, 
+            Dumbbell
         } from 'lucide-react';
+        import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
         
         import { initializeApp } from 'firebase/app';
         import { 
@@ -115,40 +125,15 @@
             catch (e) { console.warn("Switching to 1.5 Flash...", e); return await tryFetch("gemini-1.5-flash"); }
         };
 
-        // --- Components ---
-        const SimpleLineChart = ({ data, color = "#10b981", labelKey = "weight" }) => {
-            if (!data || data.length < 2) return (<div className="h-40 flex items-center justify-center text-slate-500 text-xs border border-slate-700 border-dashed rounded-lg">至少需要兩筆記錄才能顯示趨勢圖</div>);
-            const values = data.map(d => d[labelKey]);
-            const min = Math.min(...values);
-            const max = Math.max(...values);
-            const range = max - min || 1;
-            const points = data.map((d, i) => {
-                const x = (i / (data.length - 1)) * 100;
-                const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
-                return `${x},${y}`;
-            }).join(' ');
-            return (
-                <div className="w-full h-40 relative mt-4">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <polyline fill="none" stroke={color} strokeWidth="2" points={points} vectorEffect="non-scaling-stroke" />
-                    {data.map((d, i) => {
-                        const x = (i / (data.length - 1)) * 100;
-                        const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
-                        return <circle key={i} cx={x} cy={y} r="2" fill="#1e293b" stroke={color} strokeWidth="1" vectorEffect="non-scaling-stroke" />;
-                    })}
-                </svg>
-                <div className="absolute top-0 left-0 text-[10px] text-slate-500 -mt-5">{max}kg</div>
-                <div className="absolute bottom-0 left-0 text-[10px] text-slate-500 -mb-5">{min}kg</div>
-                </div>
-            );
-        };
-
+        // --- Login Screen ---
         const LoginScreen = ({ onGuestLogin, onGoogleLogin, isLoggingIn }) => (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
             <div className="z-10 w-full max-w-md bg-slate-800/90 backdrop-blur-xl p-8 rounded-3xl border border-slate-700 shadow-2xl text-center">
                 <div className="mb-8 flex flex-col items-center"><div className="bg-gradient-to-tr from-emerald-500 to-teal-500 p-4 rounded-2xl shadow-lg mb-4"><Activity className="w-10 h-10 text-white" /></div><h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">IronFuel</h1><p className="text-slate-400 mt-2 text-sm">您的專屬 AI 智能健身營養教練</p></div>
                 <div className="space-y-4">
-                <button onClick={onGoogleLogin} disabled={isLoggingIn} className="w-full bg-white hover:bg-slate-100 text-slate-900 py-3.5 rounded-xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:scale-100">{isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Google 帳號登入</span>}</button>
+                <button onClick={onGoogleLogin} disabled={isLoggingIn} className="w-full bg-white hover:bg-slate-100 text-slate-900 py-3.5 rounded-xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:scale-100">
+                    {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Google 帳號登入</span>}
+                </button>
                 <div className="relative flex items-center py-2"><div className="flex-grow border-t border-slate-600"></div><span className="flex-shrink-0 mx-4 text-slate-500 text-xs">或</span><div className="flex-grow border-t border-slate-600"></div></div>
                 <button onClick={onGuestLogin} disabled={isLoggingIn} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"><User className="w-5 h-5" />訪客試用 (不保存帳號)</button>
                 </div>
@@ -157,6 +142,7 @@
             </div>
         );
 
+        // --- AI Chat Modal ---
         const AIChatModal = ({ isOpen, onClose, profile, dayStats, apiKey }) => {
             const [messages, setMessages] = useState([{ role: 'model', text: '你好！我是你的 AI 健身教練。關於飲食、訓練或營養，有什麼我可以幫你的嗎？' }]);
             const [input, setInput] = useState('');
@@ -188,127 +174,172 @@
             );
         };
 
-        const WaterTracker = ({ user, date }) => {
-            const [water, setWater] = useState(0);
-            const [target, setTarget] = useState(2500);
-            useEffect(() => {
-                if (!user) return;
-                const unsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'water_logs', date), (docSnap) => {
-                    if (docSnap.exists()) { setWater(docSnap.data().amount || 0); if(docSnap.data().target) setTarget(docSnap.data().target); } else { setWater(0); }
-                });
-                return () => unsubscribe();
-            }, [user, date]);
-            const addWater = async (amount) => { await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'water_logs', date), { amount: Math.max(0, water + amount), target, date }, { merge: true }); };
-            return (<div className="bg-blue-900/30 border border-blue-500/30 p-4 rounded-2xl mb-6"><div className="flex justify-between items-center mb-3"><h3 className="text-blue-400 font-bold flex items-center gap-2"><Droplets className="w-5 h-5" /> 喝水紀錄</h3><span className="text-xs text-blue-300">{water} / {target} ml</span></div><div className="w-full bg-slate-800 rounded-full h-4 mb-4 overflow-hidden relative"><div className="bg-blue-500 h-full transition-all duration-500" style={{ width: `${Math.min(100, (water / target) * 100)}%` }}></div></div><div className="flex gap-3"><button onClick={() => addWater(-250)} className="p-2 rounded-lg bg-slate-800 text-slate-400 text-xs">-250ml</button><button onClick={() => addWater(250)} className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> 喝一杯</button></div></div>);
+        // --- 週期規劃元件 (修復版：加入日期與視覺化) ---
+        const PeriodizationPlanner = ({ profile }) => {
+             // 簡單計算未來日期
+             const getPhaseDate = (weeks) => {
+                 const today = new Date();
+                 const target = new Date(today.setDate(today.getDate() + (weeks * 7)));
+                 return target.toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric'});
+             };
+
+             const phases = [
+                 { name: "適應期", weeks: "第 1-4 週", focus: "建立習慣、消水腫", color: "bg-emerald-500", text: "text-emerald-400", border: "border-emerald-500/30", end: getPhaseDate(4) },
+                 { name: "燃脂期", weeks: "第 5-8 週", focus: "最大化赤字、重訓", color: "bg-blue-500", text: "text-blue-400", border: "border-blue-500/30", end: getPhaseDate(8) },
+                 { name: "衝刺期", weeks: "第 9-12 週", focus: "最後修飾、去頑固脂肪", color: "bg-purple-500", text: "text-purple-400", border: "border-purple-500/30", end: getPhaseDate(12) }
+             ];
+
+             return (
+                 <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 mt-6">
+                     <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                         <Flag className="w-5 h-5 text-yellow-400" /> 減脂週期規劃
+                     </h2>
+                     <div className="relative border-l-2 border-slate-700 ml-3 space-y-6">
+                         {phases.map((phase, idx) => (
+                             <div key={idx} className="ml-6 relative">
+                                 <div className={`absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 border-slate-800 ${phase.color}`}></div>
+                                 <div className={`p-3 rounded-xl bg-slate-900/50 border ${phase.border}`}>
+                                     <div className="flex justify-between items-center mb-1">
+                                         <span className={`font-bold text-sm ${phase.text}`}>{phase.name}</span>
+                                         <span className="text-xs text-slate-500">{phase.weeks}</span>
+                                     </div>
+                                     <p className="text-xs text-slate-300 mb-2">{phase.focus}</p>
+                                     <div className="flex justify-between items-end">
+                                         <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-1 rounded">預計完成: {phase.end}</span>
+                                     </div>
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                 </div>
+             );
         };
 
-        const PeriodizationPlanner = ({ profile }) => (
-            <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 mt-6">
-                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Flag className="w-5 h-5 text-yellow-400" /> 減脂週期規劃</h2>
-                <div className="space-y-3">
-                    {[
-                        { name: "適應期", duration: 4, focus: "建立習慣", color: "text-emerald-400" },
-                        { name: "燃脂期", duration: 4, focus: "最大化赤字", color: "text-blue-400" },
-                        { name: "衝刺期", duration: 4, focus: "最後修飾", color: "text-purple-400" }
-                    ].map((phase, idx) => (
-                        <div key={idx} className="p-3 rounded-xl bg-slate-900/50 border border-slate-700 flex justify-between items-center">
-                            <div><div className={`font-bold text-sm ${phase.color}`}>{phase.name}</div><div className="text-[10px] text-slate-500">第 {idx * 4 + 1} - {(idx + 1) * 4} 週</div></div>
-                            <div className="text-xs text-slate-300">{phase.focus}</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-
-        const DailyMotivation = ({ profile, apiKey }) => {
-            const [quote, setQuote] = useState("");
-            useEffect(() => {
-                if (!apiKey || !profile) return;
-                const today = new Date().toDateString();
-                const saved = localStorage.getItem('ironfuel_quote');
-                if (saved) { const parsed = JSON.parse(saved); if (parsed.date === today) { setQuote(parsed.text); return; } }
-                const fetchQuote = async () => {
-                    try {
-                        const data = await callGeminiAPI(apiKey, [{ parts: [{ text: `Give me a short fitness motivational quote in Traditional Chinese for goal "${profile.goal}". Max 20 words.` }] }]);
-                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "堅持就是勝利！";
-                        setQuote(text);
-                        localStorage.setItem('ironfuel_quote', JSON.stringify({ date: today, text }));
-                    } catch (e) { setQuote("今天也要加油！Fuel your fight!"); }
-                };
-                fetchQuote();
-            }, [apiKey, profile]);
-            if (!quote) return null;
-            return (<div className="mb-6 p-4 bg-gradient-to-r from-slate-800 to-slate-900 border-l-4 border-emerald-500 rounded-r-xl shadow-lg"><p className="text-sm text-emerald-100 italic font-medium">“{quote}”</p></div>);
-        };
-
-        const InBodyScan = ({ user, apiKey }) => {
-            const [scans, setScans] = useState([]);
-            const [isAnalyzing, setIsAnalyzing] = useState(false);
-            const fileInputRef = useRef(null);
-            useEffect(() => {
-                if (!user) return;
-                return onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), orderBy('date', 'desc')), (snapshot) => {
-                    setScans(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-                });
-            }, [user]);
-            const handleUpload = async (e) => {
-                const file = e.target.files[0];
-                if (!file || !apiKey) return;
-                setIsAnalyzing(true);
-                try {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onloadend = async () => {
-                        const base64Data = reader.result.split(',')[1];
-                        const data = await callGeminiAPI(apiKey, [{ parts: [{ text: `Analyze InBody sheet. JSON: {weight, smm, pbf, assessment (Chinese, max 50 words)}` }, { inlineData: { mimeType: file.type, data: base64Data } }] }]);
-                        const result = JSON.parse(data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
-                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), { ...result, date: new Date().toISOString().split('T')[0], timestamp: new Date().toISOString() });
-                        setIsAnalyzing(false); alert("分析完成！");
-                    };
-                } catch (e) { alert("分析失敗"); setIsAnalyzing(false); }
-            };
-            return (
-                <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                    <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
-                        <div className="flex justify-between mb-4"><h2 className="text-xl font-bold text-white flex gap-2"><ScanLine className="w-5 h-5 text-blue-400" /> InBody</h2></div>
-                        <button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-4 rounded-xl font-bold flex justify-center gap-2">{isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />} 上傳報告</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
-                    </div>
-                    <div className="space-y-4">{scans.map(scan => (<div key={scan.id} className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl"><div className="flex justify-between mb-2"><span className="text-emerald-400 font-mono">{scan.date}</span></div><div className="grid grid-cols-3 gap-2 text-center"><div className="bg-slate-800 p-2 rounded"><p className="text-xs text-slate-400">體重</p><p>{scan.weight}</p></div><div className="bg-slate-800 p-2 rounded"><p className="text-xs text-slate-400">骨骼肌</p><p>{scan.smm}</p></div><div className="bg-slate-800 p-2 rounded"><p className="text-xs text-slate-400">體脂</p><p>{scan.pbf}%</p></div></div></div>))}</div>
-                </div>
-            );
-        };
-
+        // --- 設定頁面 (修復版：找回消失的輸入框、中文化按鈕) ---
         const SettingsScreen = ({ user, profile, setProfile, onSave, hasApiKey }) => {
-            const [formData, setFormData] = useState(profile || { height: 171, weight: 80, age: 30, gender: 'male', activityLevel: '1.55', goal: 'cut', bodyFat: 21 });
+            const [formData, setFormData] = useState(profile || { 
+                height: 171, weight: 80, age: 30, gender: 'male', activityLevel: '1.55', goal: 'cut', bodyFat: 21 
+            });
             const [isSaving, setIsSaving] = useState(false);
+            const [saveMessage, setSaveMessage] = useState("");
             const [showAdmin, setShowAdmin] = useState(false);
+
             const calculateTDEE = () => {
-                let bmr = (10 * formData.weight) + (6.25 * formData.height) - (5 * formData.age) + (formData.gender === 'male' ? 5 : -161);
+                let bmr = (10 * formData.weight) + (6.25 * formData.height) - (5 * formData.age);
+                bmr += formData.gender === 'male' ? 5 : -161;
                 const tdee = Math.round(bmr * parseFloat(formData.activityLevel));
-                let targetCalories = tdee - (formData.goal === 'cut' ? 500 : formData.goal === 'bulk' ? -300 : 0);
-                let protein = Math.round(formData.weight * (formData.goal === 'cut' ? 2.2 : 1.8));
-                let fats = Math.round(formData.weight * 0.9);
-                let carbs = Math.max(0, Math.round((targetCalories - (protein * 4) - (fats * 9)) / 4));
+                let targetCalories = tdee;
+                let protein = 0, carbs = 0, fats = 0;
+
+                // 根據目標調整
+                if (formData.goal === 'cut') { 
+                    targetCalories = tdee - 500; 
+                    protein = Math.round(formData.weight * 2.2); 
+                    fats = Math.round(formData.weight * 0.9); 
+                } else if (formData.goal === 'bulk') { 
+                    targetCalories = tdee + 300; 
+                    protein = Math.round(formData.weight * 2.0); 
+                    fats = Math.round(formData.weight * 1.0); 
+                } else { 
+                    // maintain
+                    protein = Math.round(formData.weight * 1.8); 
+                    fats = Math.round(formData.weight * 1.0); 
+                }
+                
+                const remainingCals = targetCalories - (protein * 4) - (fats * 9);
+                carbs = Math.max(0, Math.round(remainingCals / 4));
                 return { tdee, targetCalories, protein, carbs, fats };
             };
-            const handleSave = async () => { setIsSaving(true); await onSave({ ...formData, ...calculateTDEE() }); setIsSaving(false); };
+
+            const results = calculateTDEE();
+
+            const handleSave = async () => {
+                setIsSaving(true); setSaveMessage("");
+                await onSave({ ...formData, ...results });
+                setIsSaving(false); setSaveMessage("✅ 設定已更新！"); setTimeout(() => setSaveMessage(""), 3000);
+            };
             const handleCopy = (text) => { navigator.clipboard.writeText(text); alert("已複製"); };
-            
+
             return (
                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                    <div className="flex justify-between"><h2 className="text-xl font-bold text-emerald-400 flex gap-2"><Activity /> 身體數據</h2>{hasApiKey ? <div className="text-xs text-emerald-400 border border-emerald-500 px-2 py-1 rounded-full">AI 連線</div> : <div className="text-xs text-slate-400 border border-slate-600 px-2 py-1 rounded-full">AI 離線</div>}</div>
-                    <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
-                         <div className="mb-4"><label className="text-slate-400 text-xs block mb-1">性別</label><div className="flex gap-2"><button onClick={() => setFormData({...formData, gender: 'male'})} className={`flex-1 py-3 rounded-lg font-bold ${formData.gender === 'male' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>男性</button><button onClick={() => setFormData({...formData, gender: 'female'})} className={`flex-1 py-3 rounded-lg font-bold ${formData.gender === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-700 text-slate-400'}`}>女性</button></div></div>
-                         <div className="grid grid-cols-2 gap-4"><div><label className="text-slate-400 text-xs">身高</label><input type="number" value={formData.height} onChange={e => setFormData({...formData, height: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1" /></div><div><label className="text-slate-400 text-xs">體重</label><input type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg mt-1" /></div></div>
-                         <div className="mt-4"><label className="text-slate-400 text-xs">目標</label><div className="flex gap-2 mt-1">{['cut', 'maintain', 'bulk'].map(mode => (<button key={mode} onClick={() => setFormData({...formData, goal: mode})} className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold ${formData.goal === mode ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400'}`}>{mode}</button>))}</div></div>
+                
+                {/* 頂部狀態 */}
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
+                        <Activity className="w-5 h-5" /> 身體數據設定
+                    </h2>
+                    {hasApiKey ? (
+                        <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-900/30 rounded-full border border-emerald-500/30">
+                            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div><span className="text-[10px] text-emerald-300 font-medium">AI 連線</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 rounded-full border border-slate-700">
+                            <div className="w-2 h-2 rounded-full bg-slate-500"></div><span className="text-[10px] text-slate-400 font-medium">AI 離線</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* 數據輸入卡片 (修復：補回所有欄位) */}
+                <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+                    <div className="mb-4">
+                        <label className="text-slate-400 text-xs uppercase tracking-wider block mb-1">生理性別</label>
+                        <div className="flex gap-2">
+                            <button onClick={() => setFormData({...formData, gender: 'male'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.gender === 'male' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>男性</button>
+                            <button onClick={() => setFormData({...formData, gender: 'female'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.gender === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-700 text-slate-400'}`}>女性</button>
+                        </div>
                     </div>
-                    <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700"><div className="grid grid-cols-4 gap-4 text-center"><div><p className="text-xs text-slate-400">熱量</p><p className="font-bold text-emerald-400">{calculateTDEE().targetCalories}</p></div><div><p className="text-xs text-slate-400">蛋白</p><p className="font-bold text-blue-400">{calculateTDEE().protein}g</p></div><div><p className="text-xs text-slate-400">碳水</p><p className="font-bold text-yellow-400">{calculateTDEE().carbs}g</p></div><div><p className="text-xs text-slate-400">脂肪</p><p className="font-bold text-red-400">{calculateTDEE().fats}g</p></div></div><button onClick={handleSave} disabled={isSaving} className="w-full mt-6 bg-emerald-600 text-white py-3 rounded-lg font-bold">{isSaving ? "儲存中..." : "儲存設定"}</button></div>
-                    <PeriodizationPlanner profile={profile} />
-                    <div className="text-center pt-4"><button onClick={() => setShowAdmin(!showAdmin)} className="text-xs text-slate-600">{showAdmin ? "隱藏管理" : "管理員設置"}</button>{showAdmin && <div className="mt-4 text-left bg-black/30 p-4 rounded-lg text-xs text-slate-400 font-mono"><p>App ID: {appId}</p><button onClick={() => handleCopy(appId)}>複製</button><p className="mt-2">User ID: {user.uid}</p><button onClick={() => handleCopy(user.uid)}>複製</button></div>}</div>
+
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div><label className="text-slate-400 text-xs block mb-1">身高 (cm)</label><input type="number" value={formData.height} onChange={e => setFormData({...formData, height: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+                        <div><label className="text-slate-400 text-xs block mb-1">體重 (kg)</label><input type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+                        <div><label className="text-slate-400 text-xs block mb-1">年齡</label><input type="number" value={formData.age} onChange={e => setFormData({...formData, age: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+                        <div><label className="text-slate-400 text-xs block mb-1">體脂 (%)</label><input type="number" value={formData.bodyFat} onChange={e => setFormData({...formData, bodyFat: Number(e.target.value)})} className="w-full bg-slate-700 text-white p-3 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+                    </div>
+
+                    <div className="mb-4">
+                        <label className="text-slate-400 text-xs block mb-1">每週運動量</label>
+                        <select value={formData.activityLevel} onChange={e => setFormData({...formData, activityLevel: e.target.value})} className="w-full bg-slate-700 text-white p-3 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="1.2">久坐不動 (辦公室工作)</option>
+                            <option value="1.375">輕度活動 (每週 1-3 天)</option>
+                            <option value="1.55">中度活動 (每週 3-5 天)</option>
+                            <option value="1.725">高度活動 (每週 6-7 天)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="text-slate-400 text-xs block mb-1">目前目標</label>
+                        <div className="flex gap-2">
+                            <button onClick={() => setFormData({...formData, goal: 'cut'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.goal === 'cut' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400'}`}>減脂</button>
+                            <button onClick={() => setFormData({...formData, goal: 'maintain'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.goal === 'maintain' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-400'}`}>維持</button>
+                            <button onClick={() => setFormData({...formData, goal: 'bulk'})} className={`flex-1 py-3 rounded-lg font-bold transition-colors ${formData.goal === 'bulk' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-400'}`}>增肌</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><Target className="w-24 h-24 text-emerald-400" /></div>
+                    <h3 className="text-lg font-semibold text-white mb-4">預覽：每日營養目標</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div className="bg-slate-900/50 p-3 rounded-xl"><p className="text-slate-400 text-xs">熱量</p><p className="text-2xl font-bold text-emerald-400">{results.targetCalories}</p><p className="text-xs text-slate-500">kcal</p></div>
+                        <div className="bg-slate-900/50 p-3 rounded-xl"><p className="text-slate-400 text-xs">蛋白</p><p className="text-xl font-bold text-blue-400">{results.protein}g</p></div>
+                        <div className="bg-slate-900/50 p-3 rounded-xl"><p className="text-slate-400 text-xs">碳水</p><p className="text-xl font-bold text-yellow-400">{results.carbs}g</p></div>
+                        <div className="bg-slate-900/50 p-3 rounded-xl"><p className="text-slate-400 text-xs">脂肪</p><p className="text-xl font-bold text-red-400">{results.fats}g</p></div>
+                    </div>
+                    <button onClick={handleSave} disabled={isSaving} className="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-900/20">{isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}{isSaving ? "正在儲存..." : "儲存並更新目標"}</button>
+                    {saveMessage && <div className="mt-3 p-3 bg-emerald-500/20 border border-emerald-500/50 rounded-lg flex items-center gap-2 text-emerald-400 text-sm justify-center animate-in fade-in slide-in-from-bottom-2"><CheckCircle2 className="w-4 h-4" /> {saveMessage}</div>}
+                </div>
+                
+                <PeriodizationPlanner profile={profile} />
+                
+                <div className="pt-8 border-t border-slate-800/50 text-center">
+                    <button onClick={() => setShowAdmin(!showAdmin)} className="text-[10px] text-slate-700 hover:text-slate-500 transition-colors flex items-center justify-center gap-1 mx-auto">{showAdmin ? <ChevronUp className="w-3 h-3" /> : <Lock className="w-3 h-3" />}{showAdmin ? "隱藏管理" : "管理員設置"}</button>
+                    {showAdmin && (<div className="mt-6 text-left bg-slate-900 p-4 rounded-xl border border-slate-700 animate-in slide-in-from-bottom-4"><div className="flex items-center gap-2 mb-3 text-yellow-500"><Database className="w-4 h-4" /><span className="font-bold text-sm">Firebase 連線資訊</span></div><div className="text-xs text-slate-500 mb-4 space-y-2"><p>API Key 路徑:</p><div className="bg-black/30 p-2 rounded font-mono text-emerald-400 break-all">artifacts / {appId} / public / data / config / settings</div></div><div className="space-y-2"><div><label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">App ID</label><div className="flex gap-2 mt-1"><code className="flex-1 bg-black/30 text-slate-400 p-2 rounded text-xs font-mono truncate">{appId}</code><button onClick={() => handleCopy(appId)} className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded"><Copy className="w-3 h-3" /></button></div></div><div><label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">User ID</label><div className="flex gap-2 mt-1"><code className="flex-1 bg-black/30 text-slate-400 p-2 rounded text-xs font-mono truncate">{user.uid}</code><button onClick={() => handleCopy(user.uid)} className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded"><Copy className="w-3 h-3" /></button></div></div></div></div>)}
+                </div>
                 </div>
             );
         };
 
+        // --- 其他頁面 (FoodDiary, Reports, InBody) 維持不變，但需確保引入 Recharts ---
         const FoodDiary = ({ user, profile, apiKey }) => {
             const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
             const [logs, setLogs] = useState([]);
@@ -319,6 +350,8 @@
             const [smartText, setSmartText] = useState("");
             const [isSmartParsing, setIsSmartParsing] = useState(false);
             const [isAnalyzing, setIsAnalyzing] = useState(false);
+            const [isSuggesting, setIsSuggesting] = useState(false);
+            const [suggestion, setSuggestion] = useState(null);
             const fileInputRef = useRef(null);
             const [dayStats, setDayStats] = useState({ cals: 0, pro: 0, carbs: 0, fat: 0 });
 
@@ -365,73 +398,250 @@
                     };
                 } catch (e) { alert("分析失敗"); } finally { setIsAnalyzing(false); }
             };
+            const deleteLog = async (id) => { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'logs', id)); };
+            const getMealSuggestion = async () => {
+                if (!apiKey) { alert("AI 功能尚未啟用"); return; }
+                setIsSuggesting(true); setSuggestion(null);
+                const remaining = { cals: profile.targetCalories - dayStats.cals, pro: profile.protein - dayStats.pro, carbs: profile.carbs - dayStats.carbs, fat: profile.fats - dayStats.fat };
+                try {
+                    const prompt = `我是健身教練。學生剩下額度：熱量 ${remaining.cals}kcal, 蛋 ${remaining.pro}g, 碳 ${remaining.carbs}g, 脂 ${remaining.fat}g。目標：${profile.goal}。請建議一餐，繁體中文。回傳 JSON: { "mealName": "名稱", "reason": "理由", "ingredients": "食材", "estimatedNutrition": "預估營養" }`;
+                    const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }] }]);
+                    const jsonStr = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                    setSuggestion(JSON.parse(jsonStr));
+                } catch (e) { alert("AI 思考超時"); } finally { setIsSuggesting(false); }
+            };
+            const Progress = ({ current, target, color }) => { const pct = Math.min((current / target) * 100, 100); return <div className="w-full bg-slate-700 rounded-full h-2 mt-1"><div className={`h-2 rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} /></div>; };
 
             return (
                 <div className="space-y-6">
                     <DailyMotivation profile={profile} apiKey={apiKey} />
+                    {/* ... (上方的日期、喝水元件保持不變) ... */}
                     <div className="flex items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700">
                         <button className="p-2 hover:bg-slate-700 rounded-lg" onClick={() => { const d = new Date(date); d.setDate(d.getDate() - 1); setDate(d.toISOString().split('T')[0]); }}><ChevronRight className="w-5 h-5 rotate-180" /></button>
                         <div className="flex items-center gap-2 font-bold"><CalendarIcon className="w-5 h-5 text-emerald-500" />{date}</div>
                         <button className="p-2 hover:bg-slate-700 rounded-lg" onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d.toISOString().split('T')[0]); }}><ChevronRight className="w-5 h-5" /></button>
                     </div>
                     <WaterTracker user={user} date={date} />
+                    
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
-                        <div className="flex justify-between mb-4"><div><h3 className="text-slate-400 text-sm">熱量</h3><span className="text-3xl font-bold">{Math.round(dayStats.cals)}</span><span className="text-sm text-slate-500">/{profile?.targetCalories}</span></div><div className="text-right text-sm font-bold text-emerald-400">剩 {Math.round(profile?.targetCalories - dayStats.cals)}</div></div>
-                        <div className="w-full bg-slate-700 h-2 rounded-full mb-4"><div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${Math.min(100, (dayStats.cals / profile?.targetCalories) * 100)}%` }}></div></div>
-                        <div className="grid grid-cols-3 gap-4 text-center text-xs">
-                            <div><p className="text-slate-400">蛋白</p><p className="text-lg font-bold text-blue-400">{dayStats.pro.toFixed(1)}g</p><p>剩 {(profile?.protein - dayStats.pro).toFixed(1)}</p></div>
-                            <div><p className="text-slate-400">碳水</p><p className="text-lg font-bold text-yellow-400">{dayStats.carbs.toFixed(1)}g</p><p>剩 {(profile?.carbs - dayStats.carbs).toFixed(1)}</p></div>
-                            <div><p className="text-slate-400">脂肪</p><p className="text-lg font-bold text-red-400">{dayStats.fat.toFixed(1)}g</p><p>剩 {(profile?.fats - dayStats.fat).toFixed(1)}</p></div>
+                        <div className="flex justify-between mb-4"><div><h3 className="text-slate-400 text-sm">熱量</h3><div className="flex items-baseline gap-2"><span className="text-3xl font-bold">{Math.round(dayStats.cals)}</span><span className="text-sm text-slate-500">/{profile?.targetCalories}</span></div></div><div className={`text-right text-sm font-bold ${profile?.targetCalories - dayStats.cals >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{profile?.targetCalories - dayStats.cals >= 0 ? '剩' : '超'} {Math.abs(Math.round(profile?.targetCalories - dayStats.cals))}</div></div>
+                        <Progress current={dayStats.cals} target={profile?.targetCalories} color="bg-emerald-500" />
+                        <div className="grid grid-cols-3 gap-4 mt-6 text-center">
+                            <div><p className="text-xs text-slate-400 mb-1">蛋白質</p><p className="text-lg font-bold text-blue-400">{dayStats.pro.toFixed(1)}g</p><div className="text-[10px] flex justify-center gap-2 mb-1"><span className="text-slate-500">目標 {profile?.protein}</span><span className={profile?.protein - dayStats.pro >= 0 ? "text-slate-400" : "text-red-400"}>{profile?.protein - dayStats.pro >= 0 ? "剩" : "超"} {Math.abs(profile?.protein - dayStats.pro).toFixed(1)}</span></div><Progress current={dayStats.pro} target={profile?.protein} color="bg-blue-500" /></div>
+                            <div><p className="text-xs text-slate-400 mb-1">碳水</p><p className="text-lg font-bold text-yellow-400">{dayStats.carbs.toFixed(1)}g</p><div className="text-[10px] flex justify-center gap-2 mb-1"><span className="text-slate-500">目標 {profile?.carbs}</span><span className={profile?.carbs - dayStats.carbs >= 0 ? "text-slate-400" : "text-red-400"}>{profile?.carbs - dayStats.carbs >= 0 ? "剩" : "超"} {Math.abs(profile?.carbs - dayStats.carbs).toFixed(1)}</span></div><Progress current={dayStats.carbs} target={profile?.carbs} color="bg-yellow-500" /></div>
+                            <div><p className="text-xs text-slate-400 mb-1">脂肪</p><p className="text-lg font-bold text-red-400">{dayStats.fat.toFixed(1)}g</p><div className="text-[10px] flex justify-center gap-2 mb-1"><span className="text-slate-500">目標 {profile?.fats}</span><span className={profile?.fats - dayStats.fat >= 0 ? "text-slate-400" : "text-red-400"}>{profile?.fats - dayStats.fat >= 0 ? "剩" : "超"} {Math.abs(profile?.fats - dayStats.fat).toFixed(1)}</span></div><Progress current={dayStats.fat} target={profile?.fats} color="bg-red-500" /></div>
                         </div>
                     </div>
-                    {isManualOpen && (
-                        <div className="bg-slate-800 p-5 rounded-2xl border border-slate-600">
-                            <div className="flex justify-between mb-4"><h3 className="font-bold flex gap-2"><PenTool className="text-emerald-400" /> 編輯餐點</h3><button onClick={() => setIsManualOpen(false)}><X /></button></div>
-                            <div className="bg-slate-900/50 p-3 rounded-xl mb-4 border border-slate-700">
-                                <label className="text-xs text-emerald-400 block mb-2 flex items-center gap-1"><Sparkles className="w-3 h-3" /> AI 速記</label>
-                                <div className="flex gap-2"><input type="text" placeholder="輸入食物描述..." className="flex-1 bg-slate-950 text-white p-2 rounded-lg text-sm" value={smartText} onChange={(e) => setSmartText(e.target.value)} /><button onClick={handleSmartTextAnalysis} disabled={isSmartParsing} className="bg-emerald-600 px-3 rounded-lg">{isSmartParsing ? <Loader2 className="animate-spin" /> : <Wand2 />}</button></div>
+                    {suggestion && (<div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-5 rounded-2xl border border-indigo-500/50 relative animate-in slide-in-from-top-4"><button onClick={() => setSuggestion(null)} className="absolute top-3 right-3 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button><div className="flex items-center gap-2 mb-3"><Sparkles className="w-5 h-5 text-indigo-400" /><h3 className="font-bold text-white">AI 智能餐點建議</h3></div><h4 className="text-xl font-bold text-indigo-300 mb-2">{suggestion.mealName}</h4><p className="text-slate-300 text-sm mb-3">{suggestion.reason}</p><div className="bg-black/30 p-3 rounded-lg text-sm text-slate-300 mb-3"><strong>建議食材：</strong> {suggestion.ingredients}</div><div className="text-xs text-indigo-400 font-mono">{suggestion.estimatedNutrition}</div></div>)}
+                    {/* ... (手動輸入與按鈕區保持不變) ... */}
+                    {isManualOpen && (<div className="bg-slate-800 p-5 rounded-2xl border border-slate-600 animate-in slide-in-from-top-2"><div className="flex justify-between items-center mb-4"><h3 className="text-white font-bold flex items-center gap-2"><PenTool className="w-5 h-5 text-emerald-400" /> {manualData.name ? '確認並編輯餐點' : '新增餐點'}</h3><button onClick={() => setIsManualOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button></div><div className="bg-slate-900/50 p-3 rounded-xl mb-4 border border-slate-700"><label className="text-xs text-emerald-400 block mb-2 flex items-center gap-1"><Sparkles className="w-3 h-3" /> AI 速記</label><div className="flex gap-2"><input type="text" placeholder="輸入食物描述..." className="flex-1 bg-slate-950 text-white p-2 rounded-lg border border-slate-600 text-sm" value={smartText} onChange={(e) => setSmartText(e.target.value)} /><button onClick={handleSmartTextAnalysis} disabled={isSmartParsing} className="bg-emerald-600 px-3 rounded-lg">{isSmartParsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}</button></div></div><div className="space-y-3"><input type="text" placeholder="名稱" className="w-full bg-slate-900 p-3 rounded-lg" value={manualData.name} onChange={e => setManualData({...manualData, name: e.target.value})} /><div className="grid grid-cols-2 gap-2"><input type="number" placeholder="熱量" className="bg-slate-900 p-3 rounded-lg" value={manualData.calories} onChange={e => setManualData({...manualData, calories: e.target.value})} /><select className="bg-slate-900 p-3 rounded-lg" value={manualData.mealType} onChange={e => setManualData({...manualData, mealType: e.target.value})}><option value="breakfast">早餐</option><option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="snack">點心</option></select></div><div className="grid grid-cols-3 gap-2"><input type="number" placeholder="蛋白" className="bg-slate-900 p-3 rounded-lg" value={manualData.protein} onChange={e => setManualData({...manualData, protein: e.target.value})} /><input type="number" placeholder="碳水" className="bg-slate-900 p-3 rounded-lg" value={manualData.carbs} onChange={e => setManualData({...manualData, carbs: e.target.value})} /><input type="number" placeholder="脂肪" className="bg-slate-900 p-3 rounded-lg" value={manualData.fat} onChange={e => setManualData({...manualData, fat: e.target.value})} /></div><button onClick={handleManualSubmit} className="w-full bg-emerald-600 py-3 rounded-lg font-bold">確認加入</button></div></div>)}
+                    {!isManualOpen && !isCameraOpen && (<div className="grid grid-cols-3 gap-2"><button onClick={() => setIsManualOpen(true)} className="bg-slate-700 py-4 rounded-xl flex flex-col items-center"><PenTool className="text-emerald-400 mb-1" /><span className="text-xs">手動</span></button><button onClick={() => setIsCameraOpen(true)} disabled={isAnalyzing} className="bg-slate-700 py-4 rounded-xl flex flex-col items-center">{isAnalyzing ? <Loader2 className="animate-spin text-blue-400 mb-1" /> : <Camera className="text-blue-400 mb-1" />}<span className="text-xs">拍照</span></button><button onClick={getMealSuggestion} disabled={isSuggesting} className="bg-gradient-to-br from-indigo-600 to-purple-700 py-4 rounded-xl flex flex-col items-center"><ChefHat className="text-yellow-300 mb-1" /><span className="text-xs">建議</span></button></div>)}
+                    {isCameraOpen && (<div className="bg-slate-800 p-4 rounded-xl border border-blue-500"><div className="flex justify-between mb-2"><h4 className="font-bold text-blue-400">AI 辨識</h4><button onClick={() => setIsCameraOpen(false)}><X /></button></div><input type="text" value={aiHint} onChange={e => setAiHint(e.target.value)} placeholder="提示 (選填)..." className="w-full bg-slate-900 p-2 rounded mb-3" /><button onClick={() => fileInputRef.current.click()} className="w-full bg-blue-600 py-3 rounded-lg font-bold flex justify-center gap-2"><Camera /> 選擇照片</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} /></div>)}
+                    <div className="space-y-3 pb-20">{logs.map(log => (<div key={log.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center border border-slate-700"><div><div className="font-bold">{log.name}</div><div className="text-xs text-slate-400">{Math.round(log.calories)} kcal | P:{Number(log.protein).toFixed(1)} C:{Number(log.carbs).toFixed(1)} F:{Number(log.fat).toFixed(1)}</div></div><button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'logs', log.id))}><Trash2 className="text-slate-600" /></button></div>))}</div>
+                </div>
+            );
+        };
+
+        // --- 報表頁面 (使用 Recharts 修復版) ---
+        const Reports = ({ user, profile, apiKey }) => {
+            const [reportData, setReportData] = useState([]);
+            const [average, setAverage] = useState({ cals: 0, pro: 0 });
+            const [analysis, setAnalysis] = useState("");
+            const [isAnalyzing, setIsAnalyzing] = useState(false);
+            const [weightLogs, setWeightLogs] = useState([]);
+            const [currentWeight, setCurrentWeight] = useState("");
+            const [cycleStats, setCycleStats] = useState(null);
+
+            useEffect(() => {
+                if(!user) return;
+                const qLogs = query(collection(db, 'artifacts', appId, 'users', user.uid, 'logs'), orderBy('date', 'desc'));
+                const unsubscribeLogs = onSnapshot(qLogs, (snapshot) => {
+                    const allLogs = snapshot.docs.map(d => d.data());
+                    const grouped = allLogs.reduce((acc, curr) => {
+                        if (!acc[curr.date]) { acc[curr.date] = { date: curr.date, cals: 0, pro: 0, carbs: 0, fat: 0 }; }
+                        acc[curr.date].cals += (curr.calories || 0);
+                        acc[curr.date].pro += (curr.protein || 0);
+                        acc[curr.date].carbs += (curr.carbs || 0);
+                        acc[curr.date].fat += (curr.fat || 0);
+                        return acc;
+                    }, {});
+                    // 取最近 7 天並排序
+                    const sortedDays = Object.values(grouped)
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
+                        .slice(-7);
+                    setReportData(sortedDays);
+                    if (sortedDays.length > 0) {
+                        const totalCals = sortedDays.reduce((sum, d) => sum + d.cals, 0);
+                        const totalPro = sortedDays.reduce((sum, d) => sum + d.pro, 0);
+                        setAverage({ cals: Math.round(totalCals / sortedDays.length), pro: Math.round(totalPro / sortedDays.length) });
+                    }
+                });
+                const qWeight = query(collection(db, 'artifacts', appId, 'users', user.uid, 'weight_logs'), orderBy('date', 'asc'));
+                const unsubscribeWeight = onSnapshot(qWeight, (snapshot) => { 
+                    const wLogs = snapshot.docs.map(d => ({ ...d.data(), dateShort: d.data().date.substring(5) })); 
+                    setWeightLogs(wLogs); 
+                    if (wLogs.length > 0) {
+                        // 週期計算邏輯 (同前)
+                        const sortedWeights = [...wLogs];
+                        const latest = sortedWeights[sortedWeights.length - 1];
+                        const today = new Date();
+                        const fourWeeksAgoDate = new Date();
+                        fourWeeksAgoDate.setDate(today.getDate() - 28);
+                        const fourWeeksAgoStr = fourWeeksAgoDate.toISOString().split('T')[0];
+                        const startLog = sortedWeights.find(w => w.date >= fourWeeksAgoStr) || sortedWeights[0];
+                        const daysDiff = Math.floor((new Date(latest.date) - new Date(startLog.date)) / (1000 * 60 * 60 * 24));
+                        const cycleDay = Math.min(28, Math.max(1, daysDiff)); 
+                        setCycleStats({
+                            startWeight: startLog.weight,
+                            currentWeight: latest.weight,
+                            change: (latest.weight - startLog.weight).toFixed(1),
+                            daysInCycle: cycleDay
+                        });
+                    }
+                });
+                return () => { unsubscribeLogs(); unsubscribeWeight(); };
+            }, [user]);
+
+            const handleAddWeight = async () => {
+                if (!currentWeight) return;
+                const today = new Date().toISOString().split('T')[0];
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'weight_logs'), { date: today, weight: Number(currentWeight), timestamp: new Date().toISOString() });
+                setCurrentWeight("");
+            };
+
+            const handleAnalyze = async () => {
+                if (reportData.length === 0) return;
+                if (!apiKey) { alert("AI 功能尚未啟用"); return; }
+                setIsAnalyzing(true);
+                setAnalysis("");
+                try {
+                    const prompt = `分析這7天數據：${JSON.stringify(reportData)}。體重紀錄：${JSON.stringify(weightLogs.slice(-5))}。目標：${profile.goal}。繁體中文回覆。`;
+                    const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }] }]);
+                    setAnalysis(data.candidates?.[0]?.content?.parts?.[0]?.text);
+                } catch (e) { alert("分析失敗"); } finally { setIsAnalyzing(false); }
+            };
+
+            return (
+                <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Scale className="w-5 h-5 text-emerald-400" /> 體重追蹤</h2>
+                        <div className="flex gap-2 mb-4">
+                            <input type="number" placeholder="今日體重 (kg)" className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-700 outline-none" value={currentWeight} onChange={(e) => setCurrentWeight(e.target.value)} />
+                            <button onClick={handleAddWeight} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 rounded-lg font-bold">記錄</button>
+                        </div>
+                        <div className="bg-slate-900/50 p-2 rounded-xl border border-slate-800 h-64 w-full">
+                            {weightLogs.length > 1 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={weightLogs}>
+                                        <defs>
+                                            <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <XAxis dataKey="dateShort" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                                        <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} width={30} />
+                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                        <Area type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorWeight)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex h-full items-center justify-center text-slate-500 text-sm">請至少輸入兩筆體重以顯示圖表</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {cycleStats && (
+                        <div className="bg-gradient-to-br from-slate-800 to-indigo-900 p-6 rounded-2xl border border-indigo-500/30 shadow-xl">
+                            <div className="flex justify-between items-start mb-4">
+                                <div><h3 className="text-lg font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-400" /> 4週戰情室</h3><p className="text-xs text-indigo-200 mt-1">第 {cycleStats.daysInCycle} / 28 天</p></div>
+                                <div className={`text-2xl font-bold ${cycleStats.change <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{cycleStats.change > 0 ? '+' : ''}{cycleStats.change} <span className="text-sm">kg</span></div>
                             </div>
-                            <div className="space-y-3">
-                                <input type="text" placeholder="名稱" className="w-full bg-slate-900 p-3 rounded-lg" value={manualData.name} onChange={e => setManualData({...manualData, name: e.target.value})} />
-                                <div className="grid grid-cols-2 gap-2"><input type="number" placeholder="熱量" className="bg-slate-900 p-3 rounded-lg" value={manualData.calories} onChange={e => setManualData({...manualData, calories: e.target.value})} /><select className="bg-slate-900 p-3 rounded-lg" value={manualData.mealType} onChange={e => setManualData({...manualData, mealType: e.target.value})}><option value="breakfast">早餐</option><option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="snack">點心</option></select></div>
-                                <div className="grid grid-cols-3 gap-2"><input type="number" placeholder="蛋白" className="bg-slate-900 p-3 rounded-lg" value={manualData.protein} onChange={e => setManualData({...manualData, protein: e.target.value})} /><input type="number" placeholder="碳水" className="bg-slate-900 p-3 rounded-lg" value={manualData.carbs} onChange={e => setManualData({...manualData, carbs: e.target.value})} /><input type="number" placeholder="脂肪" className="bg-slate-900 p-3 rounded-lg" value={manualData.fat} onChange={e => setManualData({...manualData, fat: e.target.value})} /></div>
-                                <button onClick={handleManualSubmit} className="w-full bg-emerald-600 py-3 rounded-lg font-bold">確認加入</button>
+                            <div className="w-full bg-slate-900 rounded-full h-2 mb-4"><div className="bg-indigo-500 h-2 rounded-full transition-all duration-1000" style={{ width: `${(cycleStats.daysInCycle / 28) * 100}%` }}></div></div>
+                            <div className="flex justify-between text-xs text-slate-400 bg-black/20 p-3 rounded-lg">
+                                <div className="text-center"><p>起點</p><p className="text-white font-bold">{cycleStats.startWeight}</p></div>
+                                <div className="border-r border-white/10"></div>
+                                <div className="text-center"><p>目前</p><p className="text-white font-bold">{cycleStats.currentWeight}</p></div>
+                                <div className="border-r border-white/10"></div>
+                                <div className="text-center"><p>倒數</p><p className="text-indigo-300 font-bold">{28 - cycleStats.daysInCycle} 天</p></div>
                             </div>
                         </div>
                     )}
-                    {!isManualOpen && !isCameraOpen && (
-                        <div className="grid grid-cols-3 gap-2">
-                            <button onClick={() => setIsManualOpen(true)} className="bg-slate-700 py-4 rounded-xl flex flex-col items-center"><PenTool className="text-emerald-400 mb-1" /><span className="text-xs">手動</span></button>
-                            <button onClick={() => setIsCameraOpen(true)} disabled={isAnalyzing} className="bg-slate-700 py-4 rounded-xl flex flex-col items-center">{isAnalyzing ? <Loader2 className="animate-spin text-blue-400 mb-1" /> : <Camera className="text-blue-400 mb-1" />}<span className="text-xs">拍照</span></button>
-                            <button className="bg-gradient-to-br from-indigo-600 to-purple-700 py-4 rounded-xl flex flex-col items-center"><ChefHat className="text-yellow-300 mb-1" /><span className="text-xs">建議</span></button>
+                    
+                    {/* 飲食摘要 & AI 分析按鈕 */}
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-400" /> 飲食週報</h2>
+                        <div className="grid grid-cols-2 gap-4 mb-8 text-center">
+                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800"><p className="text-slate-400 text-sm">平均熱量</p><p className="text-2xl font-bold text-white">{average.cals}</p><p className="text-[10px] text-slate-500">目標 {profile?.targetCalories}</p></div>
+                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800"><p className="text-slate-400 text-sm">平均蛋白</p><p className="text-2xl font-bold text-blue-400">{average.pro}g</p><p className="text-[10px] text-slate-500">目標 {profile?.protein}g</p></div>
                         </div>
-                    )}
-                    {isCameraOpen && (
-                         <div className="bg-slate-800 p-4 rounded-xl border border-blue-500">
-                            <div className="flex justify-between mb-2"><h4 className="font-bold text-blue-400">AI 辨識</h4><button onClick={() => setIsCameraOpen(false)}><X /></button></div>
-                            <input type="text" value={aiHint} onChange={e => setAiHint(e.target.value)} placeholder="提示 (選填)..." className="w-full bg-slate-900 p-2 rounded mb-3" />
-                            <button onClick={() => fileInputRef.current.click()} className="w-full bg-blue-600 py-3 rounded-lg font-bold flex justify-center gap-2"><Camera /> 選擇照片</button>
-                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-                         </div>
-                    )}
-                    <div className="space-y-3 pb-20">
-                        {logs.map(log => (
-                            <div key={log.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center border border-slate-700">
-                                <div><div className="font-bold">{log.name}</div><div className="text-xs text-slate-400">{Math.round(log.calories)} kcal | P:{Number(log.protein).toFixed(1)} C:{Number(log.carbs).toFixed(1)} F:{Number(log.fat).toFixed(1)}</div></div>
-                                <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'logs', log.id))}><Trash2 className="text-slate-600" /></button>
-                            </div>
-                        ))}
+                        
+                        <div className="border-t border-slate-700 pt-6">
+                            <button onClick={handleAnalyze} disabled={isAnalyzing || reportData.length === 0} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50">
+                                {isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageSquare className="w-5 h-5" />}
+                                {isAnalyzing ? "教練分析中..." : "✨ AI 教練週報分析"}
+                            </button>
+                            {analysis && <div className="mt-4 bg-slate-900/50 p-4 rounded-xl border border-blue-500/30"><div className="flex items-center gap-2 mb-2 text-blue-400 font-bold"><Sparkles className="w-4 h-4" /> 教練回饋：</div><div className="text-slate-300 text-sm whitespace-pre-line leading-relaxed">{analysis}</div></div>}
+                        </div>
                     </div>
                 </div>
             );
         };
 
-        const Reports = ({ user, profile, apiKey }) => {
-             // Simplified for brevity, keeps same logic as before
-             return <div className="text-center p-10 text-slate-500">報表功能載入中... (請參照上一版完整代碼)</div>;
+        const InBodyScan = ({ user, apiKey }) => {
+            const [scans, setScans] = useState([]);
+            const [isAnalyzing, setIsAnalyzing] = useState(false);
+            const [lastScanDate, setLastScanDate] = useState(null);
+            const fileInputRef = useRef(null);
+            useEffect(() => {
+                if (!user) return;
+                return onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), orderBy('date', 'desc')), (snapshot) => {
+                    const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    setScans(logs);
+                    if (logs.length > 0) { setLastScanDate(logs[0].date); }
+                });
+            }, [user]);
+            const handleUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file || !apiKey) return;
+                setIsAnalyzing(true);
+                try {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onloadend = async () => {
+                        const base64Data = reader.result.split(',')[1];
+                        const prompt = `Analyze this InBody sheet image. Extract: Weight, Skeletal Muscle Mass (SMM), Percent Body Fat (PBF). Also provide a short, encouraging assessment in Traditional Chinese (max 50 words). Return JSON: { "weight": number, "smm": number, "pbf": number, "assessment": string }`;
+                        const data = await callGeminiAPI(apiKey, [{ parts: [{ text: prompt }, { inlineData: { mimeType: file.type, data: base64Data } }] }]);
+                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const result = JSON.parse(jsonStr);
+                        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs'), {
+                            ...result, date: new Date().toISOString().split('T')[0], timestamp: new Date().toISOString()
+                        });
+                        setIsAnalyzing(false); alert("InBody 分析完成！");
+                    };
+                } catch (error) { console.error(error); alert("分析失敗"); setIsAnalyzing(false); }
+            };
+            const deleteScan = async (id) => { if(confirm("確定要刪除此紀錄嗎？")) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inbody_logs', id)); };
+            let nextScanMsg = "尚未檢測", statusColor = "text-slate-400", daysLeft = 0;
+            if (lastScanDate) {
+                const last = new Date(lastScanDate); const next = new Date(last); next.setDate(last.getDate() + 30);
+                daysLeft = Math.ceil((next - new Date()) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 0) { nextScanMsg = "⚠️ 已過期！請儘快檢測"; statusColor = "text-red-400"; } else { nextScanMsg = `還有 ${daysLeft} 天`; statusColor = "text-emerald-400"; }
+            }
+            return (
+                <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+                    <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+                        <div className="flex justify-between items-start mb-4"><div><h2 className="text-xl font-bold text-white flex items-center gap-2"><ScanLine className="w-5 h-5 text-blue-400" /> InBody 追蹤</h2><p className="text-xs text-slate-400 mt-1">定期追蹤身體組成變化</p></div><div className="text-right"><p className="text-[10px] text-slate-500">下次檢測</p><p className={`text-sm font-bold ${statusColor}`}>{nextScanMsg}</p></div></div>
+                        <button onClick={() => fileInputRef.current.click()} disabled={isAnalyzing} className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50">{isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}{isAnalyzing ? "AI 分析報告中..." : "上傳本月報告 (AI 分析)"}</button><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
+                    </div>
+                    <div className="space-y-4"><h3 className="text-white font-semibold text-sm ml-1">歷史紀錄</h3>{scans.length === 0 ? (<div className="text-center p-8 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 text-xs">尚無紀錄，請上傳您的第一份 InBody 報告。</div>) : (scans.map(scan => (<div key={scan.id} className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl relative group"><div className="flex justify-between items-center mb-2"><span className="text-emerald-400 font-mono font-bold">{scan.date}</span><button onClick={() => deleteScan(scan.id)} className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></button></div><div className="grid grid-cols-3 gap-2 mb-3 text-center"><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">體重</p><p className="text-white font-bold">{scan.weight}kg</p></div><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">骨骼肌</p><p className="text-blue-400 font-bold">{scan.smm}kg</p></div><div className="bg-slate-800 p-2 rounded-lg"><p className="text-[10px] text-slate-400">體脂</p><p className="text-yellow-400 font-bold">{scan.pbf}%</p></div></div>{scan.assessment && (<div className="text-xs text-slate-300 bg-slate-800 p-3 rounded-lg italic border-l-2 border-blue-500">" {scan.assessment} "</div>)}</div>)))}</div>
+                </div>
+            );
         };
 
-        // --- Main App ---
+        // --- App Component ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
@@ -472,7 +682,7 @@
                     <header className="bg-slate-800/80 sticky top-0 z-10 border-b border-slate-700 px-4 py-4 flex justify-between items-center">
                         <div className="flex items-center gap-2"><div className="bg-emerald-500 p-2 rounded-lg"><Activity className="text-slate-900 w-5 h-5" /></div><h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">IronFuel</h1></div>
                         <div className="flex gap-3">
-                            {profile && <div className="text-right text-xs"><p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p><p className="text-slate-500">{profile.goal}</p></div>}
+                            {profile && <div className="text-right text-xs"><p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p><p className="text-slate-500">{profile.goal === 'cut' ? '減脂' : profile.goal === 'bulk' ? '增肌' : '維持'}</p></div>}
                             <button onClick={() => setIsMobileFit(!isMobileFit)} className={`p-2 rounded-lg ${isMobileFit ? 'bg-emerald-600' : 'bg-slate-700'}`}><Smartphone className="w-4 h-4" /></button>
                             <button onClick={() => signOut(auth)} className="p-2 bg-slate-700 rounded-lg"><LogOut className="w-4 h-4" /></button>
                         </div>
