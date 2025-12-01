@@ -42,11 +42,8 @@
         width: 100%;
         height: 100%;
         z-index: -1;
-        
         background-image: url('./bg.jpg');
         background-repeat: no-repeat;
-        
-        /* 預設模式：Cover (填滿整個螢幕，適合電腦) */
         background-size: cover;      
         background-position: center center; 
         transition: all 0.5s ease;
@@ -54,26 +51,29 @@
 
       /* === 📱 手機適配模式 (置底) === */
       #bg-layer.mobile-fit {
-        /* 1. 完整顯示寬度 */
         background-size: contain !important;
-        /* 2. 關鍵修改：改為置底 (bottom)，人物會站在螢幕下方 */
         background-position: bottom center !important;
-        /* 3. 上方留白處補上深藍色背景 */
         background-color: #0f172a; 
       }
 
       /* === 內容遮罩層 === */
       #root {
-        /* 稍微調淡一點遮罩，讓背景更清楚 */
         background-color: rgba(15, 23, 42, 0.85); 
         min-height: 100vh;
         width: 100%;
         position: relative;
-        /* 確保底部導航欄不會擋住太多圖片，加一點 padding-bottom */
-        padding-bottom: 100px; 
+        padding-bottom: 100px; /* 增加底部空間給導航欄 */
       }
 
       .loading { display: flex; justify-content: center; align-items: center; height: 100vh; color: #10b981; font-weight: bold; }
+      
+      /* 水波紋動畫 */
+      @keyframes wave {
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+        100% { transform: translateY(0); }
+      }
+      .animate-wave { animation: wave 2s infinite ease-in-out; }
     </style>
 </head>
 <body>
@@ -106,7 +106,7 @@
             onSnapshot, query, orderBy, limit, Timestamp 
         } from 'firebase/firestore';
 
-        // --- 您的 Firebase Config (已保留您的設定) ---
+        // --- 您的 Firebase Config ---
         const manualConfig = {
             apiKey: "AIzaSyA9kVApSCs6eD-u5U90f3dnjbI9TILpaLQ",
             authDomain: "ironfuel-cd5bf.firebaseapp.com",
@@ -117,35 +117,12 @@
             measurementId: "G-9YS0R1FD5J"
         };
 
-        // --- App ID 設定 ---
         const envAppId = typeof __app_id !== 'undefined' ? __app_id : null;
         const appId = envAppId || 'ironfuel-app'; 
 
-        // --- Configuration ---
         const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
         const DEFAULT_API_KEY = ""; 
 
-        // --- 智慧雙模引擎 ---
-        const callGeminiAPI = async (apiKey, contents) => {
-            const tryFetch = async (model) => {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents })
-                });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return await response.json();
-            };
-
-            try {
-                return await tryFetch("gemini-2.5-flash-preview-09-2025");
-            } catch (e) {
-                console.warn("Gemini 2.5 連線失敗，切換至 1.5 Flash...", e);
-                return await tryFetch("gemini-1.5-flash");
-            }
-        };
-
-        // --- 初始化 Firebase ---
         let app, auth, db;
         try {
             let finalConfig = null;
@@ -155,17 +132,12 @@
             if (!finalConfig && Object.keys(manualConfig).length > 0) {
                 finalConfig = manualConfig;
             }
-
             if (finalConfig) {
                 app = initializeApp(finalConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
-            } else {
-                console.error("尚未設定 Firebase Config");
             }
-        } catch (e) {
-            console.error("Firebase 初始化失敗:", e);
-        }
+        } catch (e) { console.error("Firebase 初始化失敗:", e); }
 
         // --- Components ---
 
@@ -175,32 +147,23 @@
                 至少需要兩筆記錄才能顯示趨勢圖
                 </div>
             );
-
             const values = data.map(d => d[labelKey]);
             const min = Math.min(...values);
             const max = Math.max(...values);
-            const padding = (max - min) * 0.2 || 1; 
-            const graphMin = min - padding;
-            const graphMax = max + padding;
-            const range = graphMax - graphMin;
-
+            const range = max - min || 1;
             const points = data.map((d, i) => {
                 const x = (i / (data.length - 1)) * 100;
-                const y = 100 - ((d[labelKey] - graphMin) / range) * 100;
+                const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
                 return `${x},${y}`;
             }).join(' ');
-
             return (
                 <div className="w-full h-40 relative mt-4">
                 <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <line x1="0" y1="25" x2="100" y2="25" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
-                    <line x1="0" y1="50" x2="100" y2="50" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
-                    <line x1="0" y1="75" x2="100" y2="75" stroke="#334155" strokeWidth="0.5" strokeDasharray="2" />
                     <polyline fill="none" stroke={color} strokeWidth="2" points={points} vectorEffect="non-scaling-stroke" />
                     {data.map((d, i) => {
-                    const x = (i / (data.length - 1)) * 100;
-                    const y = 100 - ((d[labelKey] - graphMin) / range) * 100;
-                    return <circle key={i} cx={x} cy={y} r="1.5" fill="#1e293b" stroke={color} strokeWidth="0.5" vectorEffect="non-scaling-stroke" />;
+                        const x = (i / (data.length - 1)) * 100;
+                        const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
+                        return <circle key={i} cx={x} cy={y} r="1.5" fill="#1e293b" stroke={color} strokeWidth="0.5" vectorEffect="non-scaling-stroke" />;
                     })}
                 </svg>
                 <div className="absolute top-0 left-0 text-[10px] text-slate-500 -mt-5">{max}kg</div>
@@ -217,105 +180,55 @@
                     <div className="bg-gradient-to-tr from-emerald-500 to-teal-500 p-4 rounded-2xl shadow-lg mb-4">
                         <Activity className="w-10 h-10 text-white" />
                     </div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-                        IronFuel
-                    </h1>
+                    <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">IronFuel</h1>
                     <p className="text-slate-400 mt-2 text-sm">您的專屬 AI 智能健身營養教練</p>
                     </div>
-
                     <div className="space-y-4">
-                    <button 
-                        onClick={onGoogleLogin}
-                        disabled={isLoggingIn}
-                        className="w-full bg-white hover:bg-slate-100 text-slate-900 py-3.5 rounded-xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:scale-100"
-                    >
-                        {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                        <span className="flex items-center gap-2">Google 帳號登入</span>
-                        )}
+                    <button onClick={onGoogleLogin} disabled={isLoggingIn} className="w-full bg-white hover:bg-slate-100 text-slate-900 py-3.5 rounded-xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:scale-100">
+                        {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Google 帳號登入</span>}
                     </button>
-
-                    <div className="relative flex items-center py-2">
-                        <div className="flex-grow border-t border-slate-600"></div>
-                        <span className="flex-shrink-0 mx-4 text-slate-500 text-xs">或</span>
-                        <div className="flex-grow border-t border-slate-600"></div>
+                    <div className="relative flex items-center py-2"><div className="flex-grow border-t border-slate-600"></div><span className="flex-shrink-0 mx-4 text-slate-500 text-xs">或</span><div className="flex-grow border-t border-slate-600"></div></div>
+                    <button onClick={onGuestLogin} disabled={isLoggingIn} className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"><User className="w-5 h-5" />訪客試用 (不保存帳號)</button>
                     </div>
-
-                    <button 
-                        onClick={onGuestLogin}
-                        disabled={isLoggingIn}
-                        className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
-                    >
-                        <User className="w-5 h-5" />
-                        訪客試用 (不保存帳號)
-                    </button>
-                    </div>
-                    
-                    <p className="mt-8 text-xs text-slate-500">
-                    Fuel your fight, build your steel.
-                    </p>
+                    <p className="mt-8 text-xs text-slate-500">Fuel your fight, build your steel.</p>
                 </div>
                 </div>
             );
         };
 
         const AIChatModal = ({ isOpen, onClose, profile, dayStats, apiKey }) => {
-            const [messages, setMessages] = useState([
-                { role: 'model', text: '你好！我是你的 AI 健身教練。關於飲食、訓練或營養，有什麼我可以幫你的嗎？' }
-            ]);
+            const [messages, setMessages] = useState([{ role: 'model', text: '你好！我是你的 AI 健身教練。關於飲食、訓練或營養，有什麼我可以幫你的嗎？' }]);
             const [input, setInput] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const messagesEndRef = useRef(null);
 
-            const scrollToBottom = () => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            };
-
-            useEffect(() => {
-                scrollToBottom();
-            }, [messages, isOpen]);
+            useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isOpen]);
 
             const handleSend = async () => {
                 if (!input.trim()) return;
-                
                 const userMessage = { role: 'user', text: input };
                 setMessages(prev => [...prev, userMessage]);
                 setInput('');
                 setIsLoading(true);
-
-                const remaining = {
-                cals: profile.targetCalories - dayStats.cals,
-                pro: profile.protein - dayStats.pro,
-                carbs: profile.carbs - dayStats.carbs,
-                fat: profile.fats - dayStats.fat
-                };
+                const remaining = { cals: profile.targetCalories - dayStats.cals, pro: profile.protein - dayStats.pro, carbs: profile.carbs - dayStats.carbs, fat: profile.fats - dayStats.fat };
 
                 try {
                 const contextPrompt = `
-                    System Context:
-                    You are "IronCoach", a friendly and professional fitness nutrition coach.
-                    The user's data:
-                    - Goal: ${profile.goal === 'cut' ? 'Weight Loss (Cutting)' : 'Muscle Gain (Bulking)'}
-                    - Daily Target: ${profile.targetCalories} kcal, ${profile.protein}g Protein.
-                    - Today's Status: Consumed ${dayStats.cals} kcal.
-                    - Remaining Budget: ${remaining.cals} kcal, ${remaining.pro}g Protein.
-                    
+                    System Context: You are "IronCoach".
+                    User Data: Goal: ${profile.goal}, Target: ${profile.targetCalories}kcal, ${profile.protein}g Pro.
+                    Status: Consumed ${dayStats.cals}kcal. Remaining: ${remaining.cals}kcal, ${remaining.pro}g Pro.
                     User Query: ${input}
-                    
-                    Instruction:
-                    Answer the user in Traditional Chinese (繁體中文).
-                    Keep the answer concise, encouraging, and practical.
-                    If they ask for food recommendations, suggest items that fit their remaining macro budget.
+                    Reply in Traditional Chinese. Concise and encouraging.
                 `;
-
-                const data = await callGeminiAPI(apiKey, [{ parts: [{ text: contextPrompt }] }]);
-                
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent?key=${apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: contextPrompt }] }] })
+                });
+                if (!response.ok) throw new Error("API Error");
+                const data = await response.json();
                 setMessages(prev => [...prev, { role: 'model', text: data.candidates?.[0]?.content?.parts?.[0]?.text }]);
                 } catch (error) {
-                console.error("Chat Error", error);
-                setMessages(prev => [...prev, { role: 'model', text: `抱歉，連線發生錯誤 (${error.message})。請檢查您的 API Key 設定或網路連線。` }]);
-                } finally {
-                setIsLoading(false);
-                }
+                setMessages(prev => [...prev, { role: 'model', text: `連線錯誤: ${error.message}` }]);
+                } finally { setIsLoading(false); }
             };
 
             if (!isOpen) return null;
@@ -324,67 +237,17 @@
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="bg-slate-900 w-full max-w-md h-[80vh] rounded-2xl border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
                     <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-gradient-to-tr from-emerald-500 to-teal-500 p-2 rounded-lg">
-                        <Bot className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                        <h3 className="text-white font-bold">IronCoach</h3>
-                        <p className="text-[10px] text-emerald-400">AI 智能教練在線中</p>
-                        </div>
+                    <div className="flex items-center gap-2"><div className="bg-gradient-to-tr from-emerald-500 to-teal-500 p-2 rounded-lg"><Bot className="w-5 h-5 text-white" /></div><div><h3 className="text-white font-bold">IronCoach</h3><p className="text-[10px] text-emerald-400">AI 智能教練在線中</p></div></div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white">
-                        <X className="w-6 h-6" />
-                    </button>
-                    </div>
-
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900">
                     {messages.map((msg, idx) => (
-                        <div 
-                        key={idx} 
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                        <div 
-                            className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${
-                            msg.role === 'user' 
-                                ? 'bg-emerald-600 text-white rounded-br-none' 
-                                : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'
-                            }`}
-                        >
-                            {msg.text}
-                        </div>
-                        </div>
+                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-emerald-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'}`}>{msg.text}</div></div>
                     ))}
-                    {isLoading && (
-                        <div className="flex justify-start">
-                        <div className="bg-slate-800 p-3 rounded-2xl rounded-bl-none border border-slate-700 flex items-center gap-2">
-                            <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
-                            <span className="text-xs text-slate-400">教練正在思考...</span>
-                        </div>
-                        </div>
-                    )}
+                    {isLoading && <div className="flex justify-start"><div className="bg-slate-800 p-3 rounded-2xl rounded-bl-none border border-slate-700 flex items-center gap-2"><Loader2 className="w-4 h-4 text-emerald-500 animate-spin" /><span className="text-xs text-slate-400">教練正在思考...</span></div></div>}
                     <div ref={messagesEndRef} />
                     </div>
-
-                    <div className="p-4 bg-slate-800 border-t border-slate-700">
-                    <div className="flex gap-2">
-                        <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder="問問教練..."
-                        className="flex-1 bg-slate-900 text-white p-3 rounded-xl border border-slate-700 focus:border-emerald-500 outline-none placeholder:text-slate-600"
-                        />
-                        <button 
-                        onClick={handleSend}
-                        disabled={isLoading || !input.trim()}
-                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white p-3 rounded-xl transition-colors"
-                        >
-                        <Send className="w-5 h-5" />
-                        </button>
-                    </div>
-                    </div>
+                    <div className="p-4 bg-slate-800 border-t border-slate-700"><div className="flex gap-2"><input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="問問教練..." className="flex-1 bg-slate-900 text-white p-3 rounded-xl border border-slate-700 focus:border-emerald-500 outline-none placeholder:text-slate-600" /><button onClick={handleSend} disabled={isLoading || !input.trim()} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white p-3 rounded-xl transition-colors"><Send className="w-5 h-5" /></button></div></div>
                 </div>
                 </div>
             );
@@ -673,11 +536,46 @@
                     <button className="p-2 hover:bg-slate-700 rounded-lg" onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d.toISOString().split('T')[0]); }}><ChevronRight className="w-5 h-5 text-slate-400"/></button>
                 </div>
                 <WaterTracker user={user} date={date} />
+                
+                {/* 營養摘要卡片 (修復小數點 & 顯示剩餘) */}
                 <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
-                    <div className="flex justify-between items-end mb-4"><div><h3 className="text-slate-400 text-sm">今日熱量</h3><div className="flex items-baseline gap-2"><span className="text-3xl font-bold text-white">{dayStats.cals}</span><span className="text-sm text-slate-500">/ {profile?.targetCalories} kcal</span></div></div><div className="text-right"><span className={`text-sm font-bold ${profile?.targetCalories - dayStats.cals >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{profile?.targetCalories - dayStats.cals >= 0 ? '剩餘' : '超標'} {Math.abs(profile?.targetCalories - dayStats.cals)}</span></div></div>
+                    <div className="flex justify-between items-end mb-4">
+                        <div>
+                            <h3 className="text-slate-400 text-sm">今日熱量</h3>
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-3xl font-bold text-white">{Math.round(dayStats.cals)}</span>
+                                <span className="text-sm text-slate-500">/ {profile?.targetCalories} kcal</span>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <span className={`text-sm font-bold ${profile?.targetCalories - dayStats.cals >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {profile?.targetCalories - dayStats.cals >= 0 ? '剩餘' : '超標'} {Math.abs(Math.round(profile?.targetCalories - dayStats.cals))}
+                            </span>
+                        </div>
+                    </div>
                     <Progress current={dayStats.cals} target={profile?.targetCalories} color="bg-emerald-500" />
-                    <div className="grid grid-cols-3 gap-4 mt-6"><div className="text-center"><p className="text-xs text-slate-400 mb-1">蛋白質</p><p className="text-lg font-bold text-blue-400">{dayStats.pro}g</p><p className="text-[10px] text-slate-500">目標 {profile?.protein}g</p><Progress current={dayStats.pro} target={profile?.protein} color="bg-blue-500" /></div><div className="text-center"><p className="text-xs text-slate-400 mb-1">碳水</p><p className="text-lg font-bold text-yellow-400">{dayStats.carbs}g</p><p className="text-[10px] text-slate-500">目標 {profile?.carbs}g</p><Progress current={dayStats.carbs} target={profile?.carbs} color="bg-yellow-500" /></div><div className="text-center"><p className="text-xs text-slate-400 mb-1">脂肪</p><p className="text-lg font-bold text-red-400">{dayStats.fat}g</p><p className="text-[10px] text-slate-500">目標 {profile?.fats}g</p><Progress current={dayStats.fat} target={profile?.fats} color="bg-red-500" /></div></div>
+                    <div className="grid grid-cols-3 gap-4 mt-6">
+                        <div className="text-center">
+                            <p className="text-xs text-slate-400 mb-1">蛋白質</p>
+                            <p className="text-lg font-bold text-blue-400">{dayStats.pro.toFixed(1)}g</p>
+                            <p className="text-[10px] text-slate-500">剩 {(profile?.protein - dayStats.pro).toFixed(1)}g</p>
+                            <Progress current={dayStats.pro} target={profile?.protein} color="bg-blue-500" />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-xs text-slate-400 mb-1">碳水</p>
+                            <p className="text-lg font-bold text-yellow-400">{dayStats.carbs.toFixed(1)}g</p>
+                            <p className="text-[10px] text-slate-500">剩 {(profile?.carbs - dayStats.carbs).toFixed(1)}g</p>
+                            <Progress current={dayStats.carbs} target={profile?.carbs} color="bg-yellow-500" />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-xs text-slate-400 mb-1">脂肪</p>
+                            <p className="text-lg font-bold text-red-400">{dayStats.fat.toFixed(1)}g</p>
+                            <p className="text-[10px] text-slate-500">剩 {(profile?.fats - dayStats.fat).toFixed(1)}g</p>
+                            <Progress current={dayStats.fat} target={profile?.fats} color="bg-red-500" />
+                        </div>
+                    </div>
                 </div>
+
                 {suggestion && (<div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-5 rounded-2xl border border-indigo-500/50 relative animate-in slide-in-from-top-4"><button onClick={() => setSuggestion(null)} className="absolute top-3 right-3 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button><div className="flex items-center gap-2 mb-3"><Sparkles className="w-5 h-5 text-indigo-400" /><h3 className="font-bold text-white">AI 智能餐點建議</h3></div><h4 className="text-xl font-bold text-indigo-300 mb-2">{suggestion.mealName}</h4><p className="text-slate-300 text-sm mb-3">{suggestion.reason}</p><div className="bg-black/30 p-3 rounded-lg text-sm text-slate-300 mb-3"><strong>建議食材：</strong> {suggestion.ingredients}</div><div className="text-xs text-indigo-400 font-mono">{suggestion.estimatedNutrition}</div></div>)}
 
                 {isManualOpen && (
@@ -737,11 +635,25 @@
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
                     </div>
                 )}
+                
+                {/* 日誌列表 (修復小數點) */}
                 <div className="space-y-3 pb-20 mt-3">
                     <h3 className="text-white font-semibold text-lg flex items-center gap-2"><Utensils className="w-5 h-5 text-slate-400" /> 今日餐點</h3>
                     {logs.length === 0 ? <div className="text-center p-8 border-2 border-dashed border-slate-700 rounded-xl"><p className="text-slate-500">今天還沒紀錄喔！</p></div> : 
                     logs.map((log) => (
-                        <div key={log.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center group"><div><div className="flex items-center gap-2"><h4 className="text-white font-medium text-lg">{log.name}</h4>{log.mealType && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full uppercase">{log.mealType === 'breakfast' ? '早餐' : log.mealType === 'lunch' ? '午餐' : log.mealType === 'dinner' ? '晚餐' : log.mealType === 'snack' ? '點心' : '自動'}</span>}</div><div className="flex gap-3 text-sm text-slate-400 mt-1"><span className="text-emerald-400 font-bold">{log.calories} kcal</span><span>P: {log.protein}g</span><span>C: {log.carbs}g</span><span>F: {log.fat}g</span></div>{log.note && <p className="text-xs text-slate-500 mt-1 italic">{log.note}</p>}</div><button onClick={() => deleteLog(log.id)} className="p-2 text-slate-600 hover:text-red-400 hover:bg-slate-700 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button></div>
+                        <div key={log.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center group">
+                            <div>
+                                <div className="flex items-center gap-2"><h4 className="text-white font-medium text-lg">{log.name}</h4>{log.mealType && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full uppercase">{log.mealType === 'breakfast' ? '早餐' : log.mealType === 'lunch' ? '午餐' : log.mealType === 'dinner' ? '晚餐' : log.mealType === 'snack' ? '點心' : '自動'}</span>}</div>
+                                <div className="flex gap-3 text-sm text-slate-400 mt-1">
+                                    <span className="text-emerald-400 font-bold">{Math.round(log.calories)} kcal</span>
+                                    <span>P: {Number(log.protein).toFixed(1)}g</span>
+                                    <span>C: {Number(log.carbs).toFixed(1)}g</span>
+                                    <span>F: {Number(log.fat).toFixed(1)}g</span>
+                                </div>
+                                {log.note && <p className="text-xs text-slate-500 mt-1 italic">{log.note}</p>}
+                            </div>
+                            <button onClick={() => deleteLog(log.id)} className="p-2 text-slate-600 hover:text-red-400 hover:bg-slate-700 rounded-full transition-colors"><Trash2 className="w-5 h-5" /></button>
+                        </div>
                     ))
                     }
                 </div>
@@ -750,6 +662,7 @@
         };
 
         const Reports = ({ user, profile, apiKey }) => {
+            // ... (Reports component code remains the same as previous version)
             const [reportData, setReportData] = useState([]);
             const [average, setAverage] = useState({ cals: 0, pro: 0 });
             const [analysis, setAnalysis] = useState("");
@@ -915,107 +828,6 @@
                     {analysis && <div className="mt-4 bg-slate-900/50 p-4 rounded-xl border border-blue-500/30"><div className="flex items-center gap-2 mb-2 text-blue-400 font-bold"><Sparkles className="w-4 h-4" /> 教練回饋：</div><div className="text-slate-300 text-sm whitespace-pre-line leading-relaxed">{analysis}</div></div>}
                     </div>
                 </div>
-                </div>
-            );
-        };
-
-        const App = () => {
-            const [user, setUser] = useState(null);
-            const [profile, setProfile] = useState(null);
-            const [apiKey, setApiKey] = useState(DEFAULT_API_KEY);
-            const [view, setView] = useState('diary');
-            const [isChatOpen, setIsChatOpen] = useState(false);
-            const [isLoggingIn, setIsLoggingIn] = useState(true);
-            const [isMobileFit, setIsMobileFit] = useState(false);
-
-            useEffect(() => {
-                if (isMobileFit) { document.getElementById('bg-layer')?.classList.add('mobile-fit'); } 
-                else { document.getElementById('bg-layer')?.classList.remove('mobile-fit'); }
-            }, [isMobileFit]);
-
-            useEffect(() => {
-                if (!auth) { setIsLoggingIn(false); return; }
-                const unsubscribeAuth = onAuthStateChanged(auth, (u) => { setUser(u); setIsLoggingIn(false); });
-                return () => unsubscribeAuth();
-            }, []);
-
-            useEffect(() => {
-                if (!user || !db) return;
-                const fetchData = async () => {
-                    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
-                    const docSnap = await getDoc(docRef);
-                    if (docSnap.exists()) { setProfile(docSnap.data()); } else { setView('settings'); }
-                    
-                    const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'settings');
-                    try {
-                        const configSnap = await getDoc(configRef);
-                        if (configSnap.exists() && configSnap.data().gemini_api_key) { setApiKey(configSnap.data().gemini_api_key); }
-                    } catch(e) {}
-                };
-                fetchData();
-            }, [user]);
-
-            const saveProfile = async (newProfile) => {
-                if (!user) return;
-                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main'), newProfile);
-                setProfile(newProfile);
-            };
-
-            const handleGoogleLogin = async () => {
-                if (!auth) return;
-                setIsLoggingIn(true);
-                try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
-                catch (error) { console.error("Login failed", error); alert("登入失敗"); setIsLoggingIn(false); }
-            };
-
-            const handleGuestLogin = async () => {
-                if (!auth) return;
-                setIsLoggingIn(true);
-                try { await signInAnonymously(auth); } catch (error) { setIsLoggingIn(false); }
-            };
-
-            const handleLogout = async () => {
-                if (!auth) return;
-                await signOut(auth);
-                setProfile(null);
-                setApiKey(DEFAULT_API_KEY);
-            };
-
-            if (!app) return <div className="loading">設定未完成，請檢查 firebaseConfig。</div>;
-            if (isLoggingIn) return <div className="loading">載入中...</div>;
-            if (!user) return <LoginScreen onGuestLogin={handleGuestLogin} onGoogleLogin={handleGoogleLogin} isLoggingIn={isLoggingIn} />;
-
-            return (
-                <div className="min-h-screen text-slate-200 font-sans pb-20 relative">
-                <header className="bg-slate-800/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-700 px-4 py-4 flex justify-between items-center">
-                    <div className="flex items-center gap-2"><div className="bg-emerald-500 p-2 rounded-lg"><Activity className="w-5 h-5 text-slate-900" /></div><h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">IronFuel</h1></div>
-                    <div className="flex items-center gap-3">
-                    {profile && <div className="text-xs text-right"><p className="text-emerald-400 font-bold">{profile.targetCalories} kcal</p><p className="text-slate-500">{profile.goal === 'cut' ? '減脂' : '增肌'}</p></div>}
-                    <button onClick={() => setIsMobileFit(!isMobileFit)} className={`p-2 rounded-lg transition-colors ${isMobileFit ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'}`} title="切換背景"><Smartphone className="w-4 h-4" /></button>
-                    <button onClick={handleLogout} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors" title="登出"><LogOut className="w-4 h-4" /></button>
-                    </div>
-                </header>
-
-                <main className="p-4 max-w-md mx-auto">
-                    {view === 'settings' && <SettingsScreen user={user} profile={profile} setProfile={setProfile} hasApiKey={!!apiKey && apiKey.length > 0} onSave={saveProfile} />}
-                    {view === 'diary' && profile && <FoodDiary user={user} profile={profile} apiKey={apiKey} />}
-                    {view === 'reports' && profile && <Reports user={user} profile={profile} apiKey={apiKey} />}
-                    {view === 'inbody' && profile && <InBodyScan user={user} apiKey={apiKey} />}
-                </main>
-
-                {profile && <button onClick={() => setIsChatOpen(true)} className="fixed bottom-24 right-4 bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-2xl shadow-emerald-900/50 z-40 transition-transform hover:scale-110 active:scale-95"><MessageCircle className="w-6 h-6" /></button>}
-                {profile && <AIChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} profile={profile} dayStats={{ cals: 0, pro: 0, carbs: 0, fat: 0 }} apiKey={apiKey} />}
-
-                {profile && (
-                    <nav className="fixed bottom-0 left-0 w-full bg-slate-800 border-t border-slate-700 pb-safe z-30">
-                    <div className="flex justify-around max-w-md mx-auto">
-                        <button onClick={() => setView('settings')} className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'settings' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}><Settings className="w-6 h-6" />設定</button>
-                        <button onClick={() => setView('diary')} className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'diary' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}><Utensils className="w-6 h-6" />日記</button>
-                        <button onClick={() => setView('reports')} className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'reports' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}><BarChart3 className="w-6 h-6" />報表</button>
-                        <button onClick={() => setView('inbody')} className={`p-4 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${view === 'inbody' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}><ScanLine className="w-6 h-6" />InBody</button>
-                    </div>
-                    </nav>
-                )}
                 </div>
             );
         };
