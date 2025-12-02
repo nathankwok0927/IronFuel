@@ -132,30 +132,22 @@
         // --- Components ---
         const SimpleLineChart = ({ data, color = "#10b981", labelKey = "weight" }) => {
             if (!data || data.length < 2) return (<div className="h-40 flex items-center justify-center text-slate-500 text-xs border border-slate-700 border-dashed rounded-lg">至少需要兩筆記錄才能顯示趨勢圖</div>);
-            
-            // --- 關鍵修復：資料排序與過濾 ---
-            // 1. 確保資料按日期排序，避免線條亂跑
-            // 2. 過濾掉無效數值
+            // 確保資料按日期排序並過濾無效數據
             const sortedData = [...data]
                 .filter(d => d[labelKey] && !isNaN(d[labelKey]))
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
-
+            
             if (sortedData.length < 2) return (<div className="h-40 flex items-center justify-center text-slate-500 text-xs border border-slate-700 border-dashed rounded-lg">至少需要兩筆有效紀錄</div>);
 
             const values = sortedData.map(d => d[labelKey]);
             const min = Math.min(...values);
             const max = Math.max(...values);
-            
-            // 避免 max == min 時除以零
             const range = (max - min) === 0 ? 1 : (max - min);
-
             const points = sortedData.map((d, i) => {
                 const x = (i / (sortedData.length - 1)) * 100;
-                // 加一點 padding 避免貼邊 (min - range * 0.1)
                 const y = 100 - ((d[labelKey] - (min - range * 0.1)) / (range * 1.2)) * 100;
                 return `${x},${y}`;
             }).join(' ');
-
             return (
                 <div className="w-full h-40 relative mt-4">
                 <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -172,7 +164,7 @@
             );
         };
 
-        // --- Login Screen ---
+        // --- Login Screen (已修復) ---
         const LoginScreen = ({ onGuestLogin, onGoogleLogin, isLoggingIn }) => (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
             <div className="z-10 w-full max-w-md bg-slate-800/90 backdrop-blur-xl p-8 rounded-3xl border border-slate-700 shadow-2xl text-center">
